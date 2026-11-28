@@ -111,6 +111,51 @@ class LocalizedPlanTests(ApiTestCase):
             ai.local_advisory("Delhi", "xx")
             self.assertIn("In English:", gen.call_args[0][0][0]["parts"][0]["text"])
 
+    def test_sentence_punctuation_and_sensitive_wording_consistent(self) -> None:
+        sentence_keys = [
+            key for key in LANG_PACKS["en"]
+            if key.endswith((".why", ".impact", "safety.respiratory", "briefing.summary", "briefing.myth"))
+            or key.startswith("err.")
+        ]
+        expected_end = {"en": ".", "hi": "।", "te": ".", "ta": ".", "bn": "।", "mr": "."}
+        for lang, end in expected_end.items():
+            for key in sentence_keys:
+                text = LANG_PACKS[lang][key]
+                self.assertTrue(text.endswith(end), f"{lang}.{key} ended with {text[-1]!r}")
+                if end == "।":
+                    self.assertNotIn(". ", text, f"Stray period in {lang}.{key}")
+                else:
+                    self.assertNotIn("।", text, f"Stray danda in {lang}.{key}")
+
+        te_titles = " ".join(a.title for a in build_plan(180, Profile(children=True), "te").actions)
+        bn_titles = " ".join(a.title for a in build_plan(180, Profile(children=True), "bn").actions)
+        mr_titles = " ".join(a.title for a in build_plan(180, Profile(children=True), "mr").actions)
+        self.assertIn("పిల్లల కోసం", te_titles)
+        self.assertIn("শিশুদের", bn_titles)
+        self.assertNotIn("-দের", bn_titles)
+        self.assertIn("मुलांसाठी", mr_titles)
+        self.assertNotIn("मुले यांच्यासाठी", mr_titles)
+
+    @patch.dict("os.environ", {"GEMINI_API_KEY": ""})
+    def test_non_english_summaries_never_leak_your_location(self) -> None:
+        r_en = self.client.post("/api/plan", json={"aqi": 180, "lang": "en"}).get_json()
+        self.assertEqual(r_en["place"], "your location")
+        self.assertIn("your location", r_en["briefing"]["summary"])
+
+        for lang in ("hi", "te", "ta", "bn", "mr"):
+            body = self.client.post("/api/plan", json={"aqi": 180, "lang": lang}).get_json()
+            self.assertEqual(body["place"], t("place.default", lang))
+            self.assertNotIn("your location", body["place"].lower())
+            self.assertNotIn("your location", body["briefing"]["summary"].lower())
+
+        with patch("app.routes.place_name", return_value="Your location"):
+            for lang in ("hi", "te", "ta", "bn", "mr"):
+                geo = self.client.post(
+                    "/api/plan", json={"lat": 17.4, "lon": 78.4, "aqi": 180, "lang": lang}
+                ).get_json()
+                self.assertEqual(geo["place"], t("place.default", lang))
+                self.assertNotIn("your location", geo["briefing"]["summary"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
