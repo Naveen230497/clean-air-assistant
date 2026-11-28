@@ -9,7 +9,7 @@ from . import ai, gemini, i18n, rate_limit
 from .air_data import AirDataError, place_name, search_places
 from .nearby import OverpassDailyCapError, OverpassError, OverpassRateLimitError, nearby_places
 from .recommender import build_plan
-from .shared import round_coords
+from .shared import LANGS, round_coords
 from .validation import (
     MAX_UPLOAD_BYTES,
     ValidationError,
@@ -35,21 +35,41 @@ _NEARBY_CAT_KEYS = {
 }
 
 
+def _req_lang(allow_body: bool = True) -> str:
+    """Resolve optional language code from query string or bounded JSON body."""
+    q_lang = request.args.get("lang")
+    if isinstance(q_lang, str) and q_lang in LANGS:
+        return q_lang
+    size = request.content_length
+    if not allow_body or (size is not None and size > 32768):
+        return "en"
+    data = request.get_json(silent=True)
+    val = data.get("lang") if isinstance(data, dict) else None
+    return val if isinstance(val, str) and val in LANGS else "en"
+
+
+def _bad_request(exc: ValidationError, lang: str | None = None) -> tuple[Response, int]:
+    """Return a localized HTTP 400 validation error JSON response."""
+    resolved = lang if lang in LANGS else _req_lang()
+    return jsonify(error=i18n.localize_error(str(exc), resolved)), 400
+
+
 def _guard(max_bytes: int = SMALL_BODY) -> tuple[Response, int] | None:
     """Return an error response if the request is rate limited or too large, else None."""
     if rate_limit.is_rate_limited(request.remote_addr or "?"):
-        return jsonify(error="Too many requests, please wait a minute"), 429
+        can_peek = request.content_length is not None and request.content_length <= 32768
+        return jsonify(error=i18n.t("guard.rate_limit", _req_lang(can_peek))), 429
     size = request.content_length
     if size is None:
         size = len(request.get_data(cache=True))
     if size > max_bytes:
-        return jsonify(error="Request too large"), 413
+        return jsonify(error=i18n.t("guard.too_large", _req_lang(size <= 32768))), 413
     return None
 
 
-def _ai_unavailable() -> tuple[Response, int]:
+def _ai_unavailable(lang: str = "en") -> tuple[Response, int]:
     """Return the standard 503 JSON response when Gemini is unconfigured."""
-    return jsonify(error="This AI feature needs a Gemini API key on the server."), 503
+    return jsonify(error=i18n.t("err.ai_unavailable", lang)), 503
 
 
 @bp.get("/")
@@ -104,13 +124,13 @@ def plan() -> ResponseReturnValue:
         city, aqi, profile, lang, coords, label = parse_request(raw_json)
         aqi_source = parse_aqi_source(raw_json)
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc)
     try:
         aqi, place, source, observed_at, pm25, pm10, features = _resolve_plan_reading(
             city, aqi, aqi_source, coords, label
         )
     except AirDataError as exc:
-        return jsonify(error=i18n.t("err.plan_air", lang, error=exc)), 502
+        return jsonify(error=i18n.t("err.plan_air", lang, error=i18n.localize_error(str(exc), lang))), 502
     place = _resolve_display_place(place, city, coords, label, lang)
     if source in _SOURCE_KEYS:
         source = i18n.t(_SOURCE_KEYS[source], lang)
@@ -145,12 +165,15 @@ def locate() -> ResponseReturnValue:
     """Reverse-geocode lat/lon query coordinates into city and place labels."""
     if (blocked := _guard()):
         return blocked
+    lang = _req_lang(allow_body=False)
     try:
         lat_f, lon_f = parse_locate(request.args.get("lat"), request.args.get("lon"))
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc, lang)
     place = place_name(lat_f, lon_f)
     city = place.split(",")[0].strip() if place and place.lower() != "your location" else ""
+    if lang != "en" and place.lower() == "your location":
+        place = i18n.t("place.default", lang)
     return jsonify(lat=lat_f, lon=lon_f, city=city, place=place)
 
 
@@ -175,9 +198,9 @@ def advisory() -> ResponseReturnValue:
     try:
         city, lang = parse_advisory(request.get_json(silent=True))
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc)
     if not gemini.enabled():
-        return _ai_unavailable()
+        return _ai_unavailable(lang)
     try:
         return jsonify(ai.local_advisory(city, lang))
     except gemini.GeminiError as exc:
@@ -189,16 +212,17 @@ def image_aqi() -> ResponseReturnValue:
     """Read AQI or sky visibility from an uploaded PNG/JPEG/WebP image."""
     if (blocked := _guard(MAX_UPLOAD_BYTES)):
         return blocked
+    lang = _req_lang()
     try:
         b64, mime = parse_image(request.get_json(silent=True))
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc, lang)
     if not gemini.enabled():
-        return _ai_unavailable()
+        return _ai_unavailable(lang)
     try:
         return jsonify(ai.read_image(b64, mime))
     except gemini.GeminiError as exc:
-        return _handle_gemini_error(exc, "Could not read that image.")
+        return _handle_gemini_error(exc, "err.image_read", lang)
 
 
 @bp.post("/api/chat")
@@ -209,9 +233,9 @@ def chat() -> ResponseReturnValue:
     try:
         q, history, aqi, place, lang = parse_chat(request.get_json(silent=True))
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc)
     if not gemini.enabled():
-        return _ai_unavailable()
+        return _ai_unavailable(lang)
     try:
         return jsonify(answer=ai.chat(q, history, aqi, place, lang))
     except gemini.GeminiError as exc:
@@ -236,7 +260,7 @@ def nearby() -> ResponseReturnValue:
     try:
         lat, lon, lang = parse_nearby(request.get_json(silent=True))
     except ValidationError as exc:
-        return jsonify(error=str(exc)), 400
+        return _bad_request(exc)
     r_lat, r_lon = round_coords(lat, lon)
     try:
         found = nearby_places(r_lat, r_lon)
@@ -248,7 +272,7 @@ def nearby() -> ResponseReturnValue:
             payload["stale"] = True
         return jsonify(payload)
     except (OverpassDailyCapError, OverpassRateLimitError) as exc:
-        return jsonify(error=str(exc)), 429
+        return jsonify(error=i18n.localize_error(str(exc), lang)), 429
     except (OverpassError, requests.RequestException, ValueError, TypeError, KeyError) as exc:
         current_app.logger.warning("Nearby lookup failed (%s)", type(exc).__name__)
         return jsonify(
