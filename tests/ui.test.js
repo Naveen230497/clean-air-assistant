@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const Dom = require("../app/static/dom.js");
+const I18n = require("../app/static/i18n.js");
 const PlanView = require("../app/static/plan_view.js");
 const MapLoc = require("../app/static/map_location.js");
 const Search = require("../app/static/search_box.js");
@@ -173,4 +174,59 @@ test("style.css overrides dark-mode foreground color on step badges and checked 
   assert.ok(darkMatch, "expected dark-mode override rule for .n and checked pills");
   assert.ok(darkMatch.index > lightNIdx && darkMatch.index > lightCheckedIdx);
   assert.match(css, /\.opt>span,\.chip>span\{/);
+});
+
+test("CleanAirI18n covers all six languages with matching placeholders and safe English fallback", () => {
+  const langs = ["en", "hi", "te", "ta", "bn", "mr"];
+  assert.deepStrictEqual(Object.keys(I18n.PACKS).sort(), [...langs].sort());
+  const enKeys = Object.keys(I18n.PACKS.en).sort();
+  const placeholders = (s) => [...s.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((m) => m[1]).sort();
+  for (const lang of langs) {
+    assert.deepStrictEqual(Object.keys(I18n.PACKS[lang]).sort(), enKeys);
+    for (const key of enKeys) {
+      assert.ok(I18n.PACKS[lang][key].trim().length > 0, `${lang}.${key} should be non-empty`);
+      assert.deepStrictEqual(placeholders(I18n.PACKS[lang][key]), placeholders(I18n.PACKS.en[key]));
+    }
+  }
+  assert.strictEqual(I18n.normalizeLang("xx"), "en");
+  assert.strictEqual(I18n.tr("xx", "your_actions"), "Your actions");
+  assert.strictEqual(I18n.tr("te", "missing_key"), "");
+});
+
+test("PlanView.renderPlan localizes dynamic UI labels and sets lang attribute cleanly", () => {
+  const prevDoc = global.document;
+  const prevRaf = global.requestAnimationFrame;
+  global.document = {
+    createElement: (tag) => makeFakeNode(tag),
+    createElementNS: (ns, tag) => makeFakeNode(tag, ns),
+  };
+  global.requestAnimationFrame = (fn) => fn();
+  try {
+    const out = makeFakeNode("section");
+    PlanView.renderPlan(
+      out,
+      {
+        aqi: 210,
+        level: 4,
+        band: "చాలా హానికరం",
+        lang: "te",
+        est_reduction_pct: 55,
+        safety_note: "",
+        actions: [{category: "routine", title: "మాస్క్", why: "కారణం", impact: "తగ్గుదల"}],
+        briefing: {headline: "గాలి నాణ్యత", summary: "సారాంశం", top_three: ["మాస్క్"], source: "rules"},
+      },
+      "Guntur"
+    );
+    assert.strictEqual(out.attrs.lang, "te");
+    const srOnly = findNodes(out, (n) => (n.className || "").split(/\s+/).includes("sr-only"));
+    assert.strictEqual(srOnly[0].textContent, "US AQI 210 (చాలా హానికరం)");
+    assert.strictEqual(srOnly[1].textContent, "అంచనా కాలుష్య తగ్గింపు 55%");
+    const headings = findNodes(out, (n) => n.tagName === "h2").map((n) => n.textContent);
+    assert.ok(headings.includes("మీ చర్యలు"));
+    const impactEl = findNodes(out, (n) => (n.className || "").split(/\s+/).includes("impact"))[0];
+    assert.strictEqual(impactEl.textContent, "ప్రభావం: తగ్గుదల");
+  } finally {
+    global.document = prevDoc;
+    global.requestAnimationFrame = prevRaf;
+  }
 });

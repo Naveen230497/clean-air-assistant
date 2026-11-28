@@ -48,3 +48,15 @@ test("includes PM2.5 and PM10 only when present", () => {
   );
   assert.doesNotMatch(noPm, /PM2\.5|PM10/);
 });
+
+test("formats localized reading metadata for Telugu and Hindi and falls back to English", () => {
+  const oldIso = new Date(NOW - (4 * 3600) * 1000).toISOString();
+  const hiLine = R.formatReadingMeta({source: "Open-Meteo", observed_at: oldIso, lang: "hi"}, NOW, "en-US");
+  assert.match(hiLine, /^स्रोत: Open-Meteo\. मापन समय: .+\(4 घंटे पहले\)\. यह रीडिंग पुरानी हो सकती है।$/);
+
+  const teManual = R.formatReadingMeta({source: "మీరు నమోదు చేసినది", observed_at: null, lang: "te"}, NOW, "en-US");
+  assert.strictEqual(teManual, "మూలం: మీరు నమోదు చేసినది");
+
+  const fallback = R.formatReadingMeta({source: "Entered by you", observed_at: null, lang: "xx"}, NOW, "en-US");
+  assert.strictEqual(fallback, "Source: Entered by you");
+});
