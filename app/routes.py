@@ -75,14 +75,17 @@ def _resolve_plan_reading(
 
 
 def _resolve_display_place(
-    place: str, city: str | None, coords: tuple[float, float] | None, label: str | None
+    place: str, city: str | None, coords: tuple[float, float] | None, label: str | None, lang: str = "en"
 ) -> str:
     """Return a readable display place, reverse-geocoding coordinates when needed."""
     if place and place.lower() not in ("your location", "your area", ""):
         return place
     if coords:
-        return label or place_name(*coords) or f"Lat {coords[0]:.2f}, Lon {coords[1]:.2f}"
-    return city or "your location"
+        resolved = label or place_name(*coords) or f"Lat {coords[0]:.2f}, Lon {coords[1]:.2f}"
+        if lang != "en" and resolved.lower() in ("your location", "your area"):
+            return i18n.t("place.default", lang)
+        return resolved
+    return city or i18n.t("place.default", lang)
 
 
 @bp.post("/api/plan")
@@ -102,7 +105,7 @@ def plan() -> ResponseReturnValue:
         )
     except AirDataError as exc:
         return jsonify(error=i18n.t("err.plan_air", lang, error=exc)), 502
-    place = _resolve_display_place(place, city, coords, label)
+    place = _resolve_display_place(place, city, coords, label, lang)
     if source in _SOURCE_KEYS:
         source = i18n.t(_SOURCE_KEYS[source], lang)
     result = build_plan(aqi, profile, lang).to_dict()
