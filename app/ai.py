@@ -18,6 +18,7 @@ from typing import Any
 from . import gemini
 from .air_data import AirDataError, Reading, fetch_reading, fetch_reading_coords
 from .gemini import GeminiError
+from .i18n import t
 from .shared import LANGS, cache_get, cache_store_bounded
 from .validation import valid_city
 
@@ -71,15 +72,16 @@ def _clip(value: Any, n: int) -> str:
 
 
 # ---- 3 + 4: structured, multilingual briefing -------------------------------------------
-def template_briefing(plan: dict[str, Any], place: str) -> dict[str, Any]:
-    """Return a deterministic rules-only briefing when Gemini is unavailable."""
+def template_briefing(plan: dict[str, Any], place: str, lang: str = "en") -> dict[str, Any]:
+    """Return a deterministic rules-only localized briefing when Gemini is unavailable."""
     top = [a["title"] for a in plan["actions"][:3]]
-    return {"headline": f"Air quality: {plan['band']}",
-            "summary": (f"AQI is {plan['aqi']} in {place}. Following today's plan could cut your exposure by about "
-                        f"{plan['est_reduction_pct']}%."),
-            "top_three": top,
-            "myth_buster": "Indoor plants do not clean room air in any meaningful way; use filters and sealing.",
-            "source": "rules"}
+    return {
+        "headline": t("briefing.headline", lang, band=plan["band"]),
+        "summary": t("briefing.summary", lang, aqi=plan["aqi"], place=place, pct=plan["est_reduction_pct"]),
+        "top_three": top,
+        "myth_buster": t("briefing.myth", lang),
+        "source": "rules",
+    }
 
 
 def _get_cached_briefing(key: tuple[Any, ...]) -> dict[str, Any] | None:
@@ -96,9 +98,10 @@ def _store_briefing(key: tuple[Any, ...], value: dict[str, Any]) -> None:
 
 def _build_briefing_prompt(plan: dict[str, Any], place: str, lang: str) -> str:
     """Build the grounded prompt for a localized JSON plan briefing."""
+    lang_name = LANGS.get(lang, LANGS["en"])
     facts = "\n".join(f"- {a['title']} ({a['impact']})" for a in plan["actions"][:6])
     return (
-        f"Language: {LANGS[lang]}\nPlace: {place}\nAQI: {plan['aqi']} ({plan['band']})\n"
+        f"Language: {lang_name}\nPlace: {place}\nAQI: {plan['aqi']} ({plan['band']})\n"
         f"Estimated exposure reduction: {plan['est_reduction_pct']}%\nActions:\n{facts}\n\n"
         "Write a briefing using ONLY these facts: headline (max 10 words), summary (max 50 words), "
         "top_three (the 3 most important actions, short), myth_buster (one air-quality myth corrected)."
@@ -144,7 +147,7 @@ def briefing(plan: dict[str, Any], place: str, lang: str = "en") -> dict[str, An
                 return out
         except (GeminiError, ValueError, AttributeError, TypeError) as exc:
             logger.warning("Gemini briefing fallback (%s)", type(exc).__name__)
-    return template_briefing(plan, place)
+    return template_briefing(plan, place, lang)
 
 
 # ---- 2: function calling ------------------------------------------------------------------
@@ -178,7 +181,8 @@ def agent_reading(
 # ---- 5: Google Search grounding -----------------------------------------------------------
 def local_advisory(city: str, lang: str = "en") -> dict[str, Any]:
     """Fetch grounded local air-pollution advisories and HTTPS source links via Google Search."""
-    prompt = (f"In {LANGS[lang]}: summarise in under 90 words today's official air-pollution advisories or "
+    lang_name = LANGS.get(lang, LANGS["en"])
+    prompt = (f"In {lang_name}: summarise in under 90 words today's official air-pollution advisories or "
               f"restrictions (for example GRAP stages, school or construction curbs) for {city}. "
               "Do not state any AQI number or health category. Only report official advisories or restrictions "
               "found for the city, or say none were found.")
@@ -225,6 +229,7 @@ def chat(question: str, history: list[dict[str, str]], aqi: float, place: str, l
     contents = [{"role": "user" if h["role"] == "user" else "model", "parts": [{"text": h["text"]}]}
                 for h in history]
     contents.append({"role": "user", "parts": [{"text": question}]})
-    system = SYSTEM + f" Context: the user is in {place} where the AQI is {aqi:.0f}. Reply in {LANGS[lang]}."
+    lang_name = LANGS.get(lang, LANGS["en"])
+    system = SYSTEM + f" Context: the user is in {place} where the AQI is {aqi:.0f}. Reply in {lang_name}."
     resp = gemini.generate(contents, system=system, max_tokens=400)
     return _clip(gemini.text_of(resp), 1200)

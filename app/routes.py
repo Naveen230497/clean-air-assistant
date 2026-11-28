@@ -5,7 +5,7 @@ import requests
 from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
 from flask.typing import ResponseReturnValue
 
-from . import ai, gemini, rate_limit
+from . import ai, gemini, i18n, rate_limit
 from .air_data import AirDataError, place_name, search_places
 from .nearby import OverpassDailyCapError, OverpassError, OverpassRateLimitError, nearby_places
 from .recommender import build_plan
@@ -26,6 +26,7 @@ from .validation import (
 bp = Blueprint("main", __name__)
 
 SMALL_BODY = 8 * 1024
+_SOURCE_KEYS = {"Entered by you": "source.manual", "Read from your screenshot": "source.image"}
 
 
 def _guard(max_bytes: int = SMALL_BODY) -> tuple[Response, int] | None:
@@ -100,9 +101,11 @@ def plan() -> ResponseReturnValue:
             city, aqi, aqi_source, coords, label
         )
     except AirDataError as exc:
-        return jsonify(error=f"{exc}. You can enter the AQI manually."), 502
+        return jsonify(error=i18n.t("err.plan_air", lang, error=exc)), 502
     place = _resolve_display_place(place, city, coords, label)
-    result = build_plan(aqi, profile).to_dict()
+    if source in _SOURCE_KEYS:
+        source = i18n.t(_SOURCE_KEYS[source], lang)
+    result = build_plan(aqi, profile, lang).to_dict()
     result["place"], result["lang"] = place, lang
     result["briefing"] = ai.briefing(result, place, lang)
     result["source"], result["observed_at"] = source, observed_at
@@ -142,15 +145,16 @@ def locate() -> ResponseReturnValue:
     return jsonify(lat=lat_f, lon=lon_f, city=city, place=place)
 
 
-def _handle_gemini_error(exc: gemini.GeminiError | None, default_msg: str) -> tuple[Response, int]:
+def _handle_gemini_error(exc: gemini.GeminiError | None, default_msg: str, lang: str = "en") -> tuple[Response, int]:
     """Log sanitized Gemini failure details and return a user-safe 502 error response."""
     status_code = getattr(exc, "status_code", None)
     error_status = getattr(exc, "error_status", None)
     current_app.logger.warning("Gemini request failed: status=%s error_status=%s", status_code, error_status)
-    if status_code == 429:
-        msg = "AI features are temporarily unavailable. The rule-based plan is still shown."
-    else:
-        msg = default_msg
+    msg = (
+        i18n.t("err.rate_limit_ai", lang)
+        if status_code == 429
+        else (i18n.t(default_msg, lang) or default_msg)
+    )
     return jsonify(error=msg), 502
 
 
@@ -168,7 +172,7 @@ def advisory() -> ResponseReturnValue:
     try:
         return jsonify(ai.local_advisory(city, lang))
     except gemini.GeminiError as exc:
-        return _handle_gemini_error(exc, "Could not fetch advisories right now.")
+        return _handle_gemini_error(exc, "err.advisory", lang)
 
 
 @bp.post("/api/image-aqi")
@@ -202,7 +206,7 @@ def chat() -> ResponseReturnValue:
     try:
         return jsonify(answer=ai.chat(q, history, aqi, place, lang))
     except gemini.GeminiError as exc:
-        return _handle_gemini_error(exc, "The assistant is unavailable right now.")
+        return _handle_gemini_error(exc, "err.chat", lang)
 
 
 @bp.post("/api/nearby")
@@ -211,7 +215,7 @@ def nearby() -> ResponseReturnValue:
     if (blocked := _guard()):
         return blocked
     try:
-        lat, lon, _ = parse_nearby(request.get_json(silent=True))
+        lat, lon, lang = parse_nearby(request.get_json(silent=True))
     except ValidationError as exc:
         return jsonify(error=str(exc)), 400
     r_lat, r_lon = round_coords(lat, lon)
@@ -226,6 +230,6 @@ def nearby() -> ResponseReturnValue:
     except (OverpassError, requests.RequestException, ValueError, TypeError, KeyError) as exc:
         current_app.logger.warning("Nearby lookup failed (%s)", type(exc).__name__)
         return jsonify(
-            error="Public OpenStreetMap servers are busy right now. You can open this area on the map instead.",
+            error=i18n.t("err.nearby_busy", lang),
             map_url=f"https://www.openstreetmap.org/#map=15/{r_lat}/{r_lon}",
         ), 502
