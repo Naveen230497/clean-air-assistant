@@ -88,3 +88,19 @@ test("24-hour saved location expiry logic", () => {
   assert.strictEqual(L.isSavedExpired({lat: 17.4, lon: 78.4, ts: now - 25 * 3600 * 1000}, now), true, "25 hours old is expired");
   assert.strictEqual(L.isSavedExpired({lat: 17.4, lon: 78.4, ts: now + 100000}, now), true, "future timestamp is expired");
 });
+
+test("localizes geolocation errors, units, and descriptions with safe English fallback", async () => {
+  assert.strictEqual(L.fmt(1500, "hi"), "1.5 किमी");
+  assert.strictEqual(L.fmt(40, "te"), "40 మీ.");
+  assert.strictEqual(L.fmt(1500, "xx"), "1.5 km");
+  assert.match(L.describe({accuracy: 30, quality: "precise"}, "ta"), /30 மீ/);
+  assert.match(L.describe({accuracy: 30, quality: "precise"}, "xx"), /^Exact location found \(accurate to about 30 m\)\.$/);
+  await assert.rejects(
+    L.detect({lang: "bn"}, null),
+    (e) => e.code === 0 && e.message.includes("অবস্থান")
+  );
+  await assert.rejects(
+    L.detect({lang: "xx"}, null),
+    (e) => e.code === 0 && e.message.startsWith("Location is not available here.")
+  );
+});

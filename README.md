@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Flask 3.x](https://img.shields.io/badge/framework-Flask%203.x-black.svg)](https://flask.palletsprojects.com/)
-[![Tests](https://img.shields.io/badge/tests-112%20python%20%7C%2028%20node%20passed-success.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-114%20python%20%7C%2032%20node%20passed-success.svg)](#testing)
 [![AI Engine](https://img.shields.io/badge/AI-Google%20Gemini%202.5%20Flash-orange.svg)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -148,7 +148,7 @@ Built specifically for households and communities in regions plagued by seasonal
 | **System Instructions & Safety Settings** | `app/gemini.py` / `ai.py`: Enforces domain scope, non-diagnosis policy, and `BLOCK_MEDIUM_AND_ABOVE` safety blocklists. | Built-in deterministic rules engine (`recommender.py`) and strict input validation (`validation.py`). |
 | **Function Calling** | `ai.agent_reading`: Gemini selects `get_air_quality` for city queries; args undergo `valid_city` whitelist validation. | Direct Open-Meteo lookup (`fetch_reading` / `fetch_reading_coords`); on failure, HTTP 502 `"{exc}. You can enter the AQI manually."`. |
 | **Structured JSON Briefing** | `ai.briefing`: Enforced with `responseSchema` (`headline`, `summary`, `top_three`, `myth_buster`). | Localized rule-based template briefing (`ai.template_briefing`, `source: "rules"`) with English fallback. |
-| **Multilingual Output** | `ai.briefing` / `ai.chat` / `ai.local_advisory` & rule catalogs: Supports English, Hindi, Telugu, Tamil, Bengali, and Marathi (machine-assisted translations, not guaranteed expert-reviewed; not full UI localization). | Localized template briefing (`en` fallback) for plans; `err.*` messages localize on 502, while rate-limit (429), 400, missing-key (503), and `/api/image-aqi` errors stay English. |
+| **Multilingual Output** | `ai.briefing` / `ai.chat` / `ai.local_advisory`, full-page DOM (`i18n.js` / `locales/*.js`), and backend error/route catalogs (`i18n.py` / `app/locales/*.py`): Supports `en`, `hi`, `te`, `ta`, `bn`, and `mr` (machine-assisted translations, not guaranteed expert-reviewed). | Localized template briefings, frontend status/error copy, and localized `400`/`413`/`429`/`502`/`503` JSON errors; returned OSM place names, vendored Leaflet controls/attribution, and `>32 KB` `413` errors without `?lang=` remain English. |
 | **Google Search Grounding (Advisories)** | `ai.local_advisory`: Discovers live government advisories (e.g., GRAP stages, school/construction curbs) with cited HTTPS URLs. | Missing key (503): `"This AI feature needs a Gemini API key on the server."` · 429 (502): `"AI features are temporarily unavailable. The rule-based plan is still shown."` · Other failure (502): `"Could not fetch advisories right now."` |
 | **Image Reading** | `ai.read_image`: Multimodal vision extracts AQI from screenshots or gauges visibility from sky photos (`aqi: null` if unreadable). | Missing key (503): `"This AI feature needs a Gemini API key on the server."` · 429 (502): `"AI features are temporarily unavailable. The rule-based plan is still shown."` · Other failure (502): `"Could not read that image."` |
 | **Multi-turn Chat** | `ai.chat`: Context-aware follow-up Q&A grounded in the user's current place and AQI. | Missing key (503): `"This AI feature needs a Gemini API key on the server."` · 429 (502): `"AI features are temporarily unavailable. The rule-based plan is still shown."` · Other failure (502): `"The assistant is unavailable right now."` |
@@ -185,16 +185,17 @@ clean-air-assistant/
 │   ├── air_data.py         # Multi-service sensor ingestion, geocoding & reverse geocoding
 │   ├── aqi.py              # EPA US AQI classification scale (0-500, 6 severity bands)
 │   ├── i18n.py             # Offline localization helpers with English fallback
-│   ├── locales/            # Machine-assisted 6-language catalogs (en, hi, te, ta, bn, mr; not guaranteed expert-reviewed)
+│   ├── locales/            # Machine-assisted 6-language backend catalogs (en, hi, te, ta, bn, mr; not guaranteed expert-reviewed)
 │   ├── recommender.py      # Rules engine & mathematical exposure reduction formula
 │   ├── gemini.py           # Robust REST client (auto-loads .env, safety, timeouts)
 │   ├── nearby.py           # OpenStreetMap nearby places (Overpass mirrors, 30s deadline, 10m + 24h stale caches, 1 req/2s & daily cap)
 │   ├── ai.py               # 7 GenAI capability implementations & localized deterministic fallbacks
 │   └── static/             # Pure Vanilla frontend (plain deferred IIFE scripts, no build tools)
-│       ├── index.html      # Accessible semantic HTML5 layout with ARIA landmarks (static form labels stay English)
-│       ├── style.css       # Responsive design, light/dark themes, accessible focus contrast, reduced-motion
+│       ├── locales/        # Split 6-language UI message modules (en, hi, te, ta, bn, mr)
+│       ├── index.html      # Accessible semantic HTML5 layout with top 🌐 selector & data-i18n hooks
+│       ├── style.css       # Responsive design, light/dark themes, accessible focus contrast, wrapping-safe layout
 │       ├── locate.js       # Client-side settling location engine (CleanAirLocate)
-│       ├── i18n.js         # Machine-assisted dynamic UI translations & lang tagging (CleanAirI18n; not full UI localization)
+│       ├── i18n.js         # Whole-page declarative translator, localStorage choice & lang tagging (CleanAirI18n)
 │       ├── reading.js      # Reading source, local timestamp, age & PM formatter (CleanAirReading)
 │       ├── dom.js          # Shared DOM/SVG helpers, constants, and JSON fetch wrapper (CleanAirDom)
 │       ├── plan_view.js    # Plan payload builder, SVG AQI gauge, skeleton & cards (CleanAirPlanView)
@@ -211,14 +212,14 @@ clean-air-assistant/
 ├── tests/
 │   ├── __init__.py
 │   ├── helpers.py          # Shared offline test base class and socket guard
-│   ├── locate.test.js      # 11 unit tests for location engine settling & thresholds
+│   ├── locate.test.js      # 12 unit tests for location engine settling, thresholds & i18n messages
 │   ├── reading.test.js     # 5 unit tests for reading time, stale warning, i18n & PM formatting
-│   ├── ui.test.js          # 12 unit tests for pure DOM/payload/gauge/search/a11y/i18n/CSS helpers
+│   ├── ui.test.js          # 15 unit tests for pure DOM/payload/gauge/search/a11y/i18n/HTML/CSS helpers
 │   ├── test_ai_routes.py   # 13 tests for AI HTTP routes (/api/image-aqi, /api/advisory, /api/chat)
 │   ├── test_air_data.py    # 24 tests for place search, Nominatim throttle, geocoding & reading metadata
 │   ├── test_gemini.py      # 17 tests for Gemini REST client, breaker, fallback & capabilities
 │   ├── test_hygiene.py     # 4 tests for DOM XSS sinks, inline HTML assets, key prefixes & repo size
-│   ├── test_i18n.py        # 9 tests for 6-language catalogs, rules, briefings, punctuation, nearby & fallbacks
+│   ├── test_i18n.py        # 11 tests for 6-language catalogs, rules, HTML keys & localized route responses
 │   ├── test_nearby.py      # 18 tests for OpenStreetMap Overpass & caches
 │   ├── test_recommender.py # 8 tests for AQI bands & rules engine
 │   ├── test_routes.py      # 13 tests for core HTTP routes, CSP & rate limiter
@@ -302,7 +303,7 @@ python -W default -m unittest discover -s tests -t .
 ```
 Output:
 ```text
-Ran 112 tests
+Ran 114 tests
 
 OK
 ```
@@ -313,17 +314,17 @@ node --test tests/
 ```
 Output:
 ```text
-# tests 28
+# tests 32
 # suites 0
-# pass 28
+# pass 32
 # fail 0
 ```
 
 ### Code Quality
-- **Static analysis (`ruff`, `flake8`, & `eslint`)**: `0` findings across `app`, `tests`, and first-party `app/static/` (configured in `pyproject.toml`, `.flake8` with max line length `120`, and `eslint.config.js`); `pylint app` rated `9.90 / 10`.
+- **Static analysis (`ruff`, `flake8`, & `eslint`)**: `0` findings across `app`, `tests`, and first-party `app/static/` including split `app/static/locales/*.js` (configured in `pyproject.toml`, `.flake8` with max line length `120`, and `eslint.config.js`); `pylint app` rated `9.90 / 10`.
 - **Modularity & complexity**: `0` functions above Cyclomatic Complexity `10` (`radon cc -s -n C app`), `0` Python functions or first-party JS function bodies above `40` lines, and all first-party JS modules are plain deferred IIFEs with `0` `innerHTML` usage.
-- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`137/137` items documented); `94%` Python line coverage across `app/` (`coverage run --source=app`: `1077` statements, `65` missed); `100.0%` parameter and return type annotations across `app/` (`106/106` functions).
-- **Multilingual scope (6 languages — machine-assisted translations, not guaranteed expert-reviewed)**: rule-based plans, actions, safety notes, template briefings, default place fallbacks, dynamic card/reading/advisory/nearby headings, nearby venue categories, `m`/`km` distance units (`lang` attributes set via `textContent`), and `lang`-aware route error messages (`err.*`) follow `en`, `hi`, `te`, `ta`, `bn`, and `mr` (partial output localization, not full UI localization); returned OpenStreetMap place names, static form labels in `index.html`, geolocation/search status text, rate-limit (`429`) and `400` error messages, `/api/image-aqi` error text, and missing-key (`503`) responses stay English.
+- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`140/140` items documented); `94%` Python line coverage across `app/` (`coverage run --source=app`: `1105` statements, `64` missed); `100.0%` parameter and return type annotations across `app/` (`109/109` functions).
+- **Multilingual scope (6 languages — machine-assisted translations, not guaranteed expert-reviewed)**: full-page UI (`index.html` `data-i18n*` hooks, top `🌐` header selector with native script names `English, हिन्दी, తెలుగు, தமிழ், বাংলা, मराठी` and `localStorage` persistence in `try/catch`), geolocation/search/map statuses, rule-based plans, actions, safety notes, template/Gemini briefings, reading metadata, dynamic card labels, nearby categories, `m`/`km` distance units, and `400`/`413`/`429`/`502`/`503` route error messages support `en`, `hi`, `te`, `ta`, `bn`, and `mr` with English fallback; returned OpenStreetMap venue names, vendored Leaflet controls/attribution, numeric `Lat/Lon` coordinates, brand names (`Open-Meteo`, `Google Search`, `OpenStreetMap`, `BigDataCloud`), and `>32 KB` `413` errors without `?lang=` stay English.
 
 ---
 

@@ -7,24 +7,24 @@ All automated tests run completely offline without live Gemini, Open-Meteo, Nomi
 - `NoNetworkTestCase` resets `gemini._breaker_until` and `ai._briefing_cache`, then patches `socket.socket.connect` and `socket.create_connection` to raise `RuntimeError` if any code attempts a real socket connection.
 - `ApiTestCase` builds an isolated Flask `test_client()` and clears `rate_limit._hits` before and after each test; `_AirDataApiTestCase` (`tests/test_air_data.py`) additionally resets `air_data._cache`, `air_data._names`, and `air_data._last_nominatim`.
 
-## Test Suites (`112` Python + `28` Node)
+## Test Suites (`114` Python + `32` Node)
 
 ```bash
-# Python suite (112 tests, strict ResourceWarning visibility)
+# Python suite (114 tests, strict ResourceWarning visibility)
 python -W default -m unittest discover -s tests -t .
 
-# Coverage across app/ (94% measured: 1077 statements, 65 missed; CI min 90%)
+# Coverage across app/ (94% measured: 1105 statements, 64 missed; CI min 90%)
 python -W default -m coverage run --source=app -m unittest discover -s tests -t .
 python -m coverage report --fail-under=90
 
-# Frontend Node suites (28 tests)
+# Frontend Node suites (32 tests)
 node --test tests/
 ```
 
-- **Python breakdown (`tests/`):** `test_air_data.py` (24), `test_nearby.py` (18), `test_gemini.py` (17), `test_ai_routes.py` (13), `test_routes.py` (13), `test_i18n.py` (9), `test_recommender.py` (8), `test_validation.py` (6), `test_hygiene.py` (4).
-- **Frontend breakdown (`tests/`):** `ui.test.js` (12), `locate.test.js` (11), `reading.test.js` (5).
-- **Hygiene (`tests/test_hygiene.py`):** Checks first-party `app/static/*.js` for DOM HTML-injection sinks, `index.html` for inline `<script>`/`<style>` blocks or attributes, all tracked files for API key prefixes, and total tracked repository size under `1 MB`.
-- **Multilingual tests (`tests/test_i18n.py`, `tests/reading.test.js`, `tests/ui.test.js`):** Cover `en`, `hi`, `te`, `ta`, `bn`, and `mr` outputs, nearby venue categories, and `m`/`km` distance units (machine-assisted translations, not guaranteed expert-reviewed; not full UI localization) plus fallback safety; returned OpenStreetMap place names, static form labels, geolocation/search status text, rate-limit (`429`) and `400` error messages, and image-AQI error text stay English.
+- **Python breakdown (`tests/`):** `test_air_data.py` (24), `test_nearby.py` (18), `test_gemini.py` (17), `test_ai_routes.py` (13), `test_routes.py` (13), `test_i18n.py` (11), `test_recommender.py` (8), `test_validation.py` (6), `test_hygiene.py` (4).
+- **Frontend breakdown (`tests/`):** `ui.test.js` (15), `locate.test.js` (12), `reading.test.js` (5).
+- **Hygiene (`tests/test_hygiene.py`):** Checks all first-party JS files under `app/static/` (`rglob("*.js")`, excluding `leaflet.js`) for DOM HTML-injection sinks, `index.html` for inline `<script>`/`<style>` blocks or attributes, all tracked files for API key prefixes, and total tracked repository size under `1 MB`.
+- **Multilingual tests (`tests/test_i18n.py`, `tests/locate.test.js`, `tests/reading.test.js`, `tests/ui.test.js`):** Cover full-page UI, plans, briefings, geolocation/search statuses, nearby categories/`m`/`km` units, and backend guard/validation/error responses across `en`, `hi`, `te`, `ta`, `bn`, and `mr` (machine-assisted translations, not guaranteed expert-reviewed) plus fallback safety; returned OpenStreetMap place names, vendored Leaflet zoom tooltips/attribution, numeric `Lat/Lon` coordinates, and `>32 KB` `413` errors without `?lang=` remain English.
 
 ## Static Analysis & CI Gates (`.github/workflows/ci.yml`)
 

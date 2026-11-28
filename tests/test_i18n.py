@@ -1,16 +1,18 @@
 """Tests for backend 6-language message catalogs, fallbacks, rules, briefings, and routes."""
+import pathlib
 import re
 import unittest
 from unittest.mock import patch
 
 from app import ai
+from app.air_data import AirDataError
 from app.gemini import GeminiError
-from app.i18n import band_label, t
+from app.i18n import band_label, localize_error, t
 from app.locales import LANG_PACKS
-from app.nearby import OverpassError
+from app.nearby import OverpassDailyCapError, OverpassError, OverpassRateLimitError
 from app.recommender import Profile, build_plan
 from app.shared import LANGS
-from tests.helpers import ApiTestCase, NoNetworkTestCase, make_gemini_resp
+from tests.helpers import PNG, ApiTestCase, NoNetworkTestCase, make_gemini_resp
 
 PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z0-9_]+)\}")
 
@@ -179,6 +181,85 @@ class LocalizedPlanTests(ApiTestCase):
                 self.assertEqual([p["name"] for p in res["places"]], [p["name"] for p in sample])
                 self.assertEqual([p["category"] for p in res["places"]], [t(k, lang) for k in cat_keys])
         self.assertEqual(sample[0]["category"], "Hospital or clinic")
+
+    def test_localized_guard_validation_air_and_locate_errors(self) -> None:
+        self.assertEqual(localize_error("Custom raw text", "hi"), "Custom raw text")
+        self.assertEqual(localize_error("City name is invalid", "xx"), "City name is invalid")
+        self.assertIn("children", localize_error("children must be true or false", "mr"))
+
+        r_val = self.client.post("/api/plan", json={"lang": "hi"})
+        self.assertEqual(r_val.status_code, 400)
+        self.assertEqual(r_val.get_json()["error"], t("val.need_loc", "hi"))
+
+        r_bool = self.client.post("/api/plan", json={"aqi": 100, "children": "yes", "lang": "te"})
+        self.assertEqual(r_bool.status_code, 400)
+        self.assertEqual(r_bool.get_json()["error"], t("val.bool", "te", field="children"))
+
+        r_loc_err = self.client.get("/api/locate?lang=bn")
+        self.assertEqual(r_loc_err.status_code, 400)
+        self.assertEqual(r_loc_err.get_json()["error"], t("val.latlon_req", "bn"))
+
+        r_large = self.client.post("/api/plan", json={"aqi": 150, "lang": "ta", "pad": "x" * 9000})
+        self.assertEqual(r_large.status_code, 413)
+        self.assertEqual(r_large.get_json()["error"], t("guard.too_large", "ta"))
+
+        with patch("app.ai.fetch_reading", side_effect=AirDataError("Location not found")):
+            r_air = self.client.post("/api/plan", json={"city": "Nowhere", "lang": "mr"})
+        self.assertEqual(r_air.status_code, 502)
+        self.assertEqual(r_air.get_json()["error"], t("err.plan_air", "mr", error=t("air.not_found", "mr")))
+
+        with patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
+            r_503 = self.client.post("/api/image-aqi", json={"image": PNG, "mime": "image/png", "lang": "ta"})
+        self.assertEqual(r_503.status_code, 503)
+        self.assertEqual(r_503.get_json()["error"], t("err.ai_unavailable", "ta"))
+
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "k"}), patch(
+            "app.gemini.generate", side_effect=GeminiError("x")
+        ):
+            r_img = self.client.post("/api/image-aqi", json={"image": PNG, "mime": "image/png", "lang": "bn"})
+        self.assertEqual(r_img.status_code, 502)
+        self.assertEqual(r_img.get_json()["error"], t("err.image_read", "bn"))
+
+        cap_err = OverpassDailyCapError("Daily limit for nearby places reached.")
+        with patch("app.routes.nearby_places", side_effect=cap_err):
+            r_cap = self.client.post("/api/nearby", json={"lat": 16.3, "lon": 80.4, "lang": "hi"})
+        self.assertEqual(r_cap.status_code, 429)
+        self.assertEqual(r_cap.get_json()["error"], t("err.nearby_daily_cap", "hi"))
+
+        msg_wait = "Please wait a moment before searching nearby places again."
+        with patch("app.routes.nearby_places", side_effect=OverpassRateLimitError(msg_wait)):
+            r_wait = self.client.post("/api/nearby", json={"lat": 16.3, "lon": 80.4, "lang": "te"})
+        self.assertEqual(r_wait.status_code, 429)
+        self.assertEqual(r_wait.get_json()["error"], t("err.nearby_wait", "te"))
+
+        with patch("app.routes.place_name", return_value="Your location"):
+            r_te = self.client.get("/api/locate?lat=17.4&lon=78.4&lang=te").get_json()
+            r_en = self.client.get("/api/locate?lat=17.4&lon=78.4&lang=en").get_json()
+            self.assertEqual(r_te["place"], t("place.default", "te"))
+            self.assertEqual(r_en["place"], "Your location")
+
+        with patch("app.rate_limit.is_rate_limited", return_value=True):
+            r_429 = self.client.post("/api/plan", json={"aqi": 100, "lang": "hi"})
+        self.assertEqual(r_429.status_code, 429)
+        self.assertEqual(r_429.get_json()["error"], t("guard.rate_limit", "hi"))
+
+    def test_index_html_declares_i18n_attributes_and_top_lang_control(self) -> None:
+        html = (pathlib.Path(__file__).resolve().parents[1] / "app" / "static" / "index.html").read_text("utf-8")
+        self.assertIn('id="lang"', html)
+        self.assertLess(html.index('id="lang"'), html.index('id="form"'))
+        self.assertIn('form="form"', html)
+        for label in ("English", "हिन्दी", "తెలుగు", "தமிழ்", "বাংলা", "मराठी", "🌐"):
+            self.assertIn(label, html)
+        html_keys = set(re.findall(r'\bdata-i18n(?:-lead)?="([^"]+)"', html))
+        for spec in re.findall(r'\bdata-i18n-attr="([^"]+)"', html):
+            for pair in spec.split(","):
+                if ":" in pair:
+                    html_keys.add(pair.split(":", 1)[1].strip())
+        self.assertGreaterEqual(len(html_keys), 40)
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":

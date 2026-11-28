@@ -280,3 +280,117 @@ test("Extras.renderNearbyList translates categories and units while keeping retu
     global.document = prevDoc;
   }
 });
+
+test("every data-i18n key referenced in index.html exists and is non-empty in all six languages", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "app", "static", "index.html"), "utf8");
+  const keys = new Set();
+  for (const m of html.matchAll(/\bdata-i18n(?:-lead)?="([^"]+)"/g)) keys.add(m[1]);
+  for (const m of html.matchAll(/\bdata-i18n-attr="([^"]+)"/g)) {
+    for (const pair of m[1].split(",")) {
+      const idx = pair.indexOf(":");
+      if (idx > 0) keys.add(pair.slice(idx + 1).trim());
+    }
+  }
+  assert.ok(keys.size >= 40, `Expected at least 40 HTML i18n keys, found ${keys.size}`);
+  for (const lang of I18n.LANGS) {
+    for (const key of keys) {
+      assert.ok(I18n.PACKS[lang][key]?.trim().length > 0, `Missing HTML key ${lang}.${key}`);
+    }
+  }
+});
+
+test("I18n.applyPage and initPageI18n translate DOM, handle storage safely, and fall back to English", () => {
+  const mkEl = (attrs = {}, firstText = null) => {
+    const store = {...attrs};
+    const listeners = {};
+    return {
+      textContent: "",
+      value: "",
+      firstChild: firstText === null ? null : {nodeType: 3, nodeValue: firstText},
+      getAttribute: (k) => (Object.hasOwn(store, k) ? store[k] : null),
+      setAttribute: (k, v) => { store[k] = String(v); },
+      addEventListener: (ev, fn) => { listeners[ev] = fn; },
+      dispatch: (ev) => { if (listeners[ev]) listeners[ev](); },
+    };
+  };
+  const titleEl = mkEl({"data-i18n": "page_title"});
+  const metaDesc = mkEl({"data-i18n-attr": "content:page_desc"});
+  const h1 = mkEl({"data-i18n-lead": "hero_h1_start"}, "Breathe easier, ");
+  const cityIn = mkEl({"data-i18n-attr": "placeholder:city_placeholder"});
+  const select = mkEl({});
+  const fakeDoc = {
+    documentElement: {lang: "en"},
+    title: "init",
+    getElementById: (id) => (id === "lang" ? select : null),
+    querySelectorAll: () => [titleEl, metaDesc, h1, cityIn],
+  };
+
+  const prevStorage = global.localStorage;
+  let stored = {};
+  global.localStorage = {
+    getItem: (k) => (Object.hasOwn(stored, k) ? stored[k] : null),
+    setItem: (k, v) => { stored[k] = String(v); },
+  };
+  try {
+    let changedTo = "";
+    assert.strictEqual(I18n.initPageI18n(fakeDoc, (code) => { changedTo = code; }), "en");
+    assert.strictEqual(fakeDoc.documentElement.lang, "en");
+    assert.strictEqual(h1.firstChild.nodeValue, I18n.PACKS.en.hero_h1_start);
+    select.value = "mr";
+    select.dispatch("change");
+    assert.strictEqual(changedTo, "mr");
+    assert.strictEqual(stored["cleanair.lang"], "mr");
+    assert.strictEqual(fakeDoc.documentElement.lang, "mr");
+    assert.strictEqual(titleEl.textContent, I18n.PACKS.mr.page_title);
+    assert.strictEqual(metaDesc.getAttribute("content"), I18n.PACKS.mr.page_desc);
+    assert.strictEqual(h1.firstChild.nodeValue, I18n.PACKS.mr.hero_h1_start);
+    assert.strictEqual(cityIn.getAttribute("placeholder"), I18n.PACKS.mr.city_placeholder);
+
+    I18n.applyPage("xx", fakeDoc);
+    assert.strictEqual(fakeDoc.documentElement.lang, "en");
+    assert.strictEqual(cityIn.getAttribute("placeholder"), I18n.PACKS.en.city_placeholder);
+
+    global.localStorage = {
+      getItem: () => { throw new Error("blocked"); },
+      setItem: () => { throw new Error("blocked"); },
+    };
+    assert.strictEqual(I18n.getSavedLang(), "en");
+    assert.strictEqual(I18n.saveLang("te"), "te");
+  } finally {
+    global.localStorage = prevStorage;
+  }
+});
+
+test("Dom.postJson and PlanView.buildPayload localize fallback errors and read external lang selector", async () => {
+  const prevDoc = global.document;
+  const prevFetch = global.fetch;
+  const prevFormData = global.FormData;
+  global.document = {
+    documentElement: {lang: "hi"},
+    getElementById: (id) => (id === "lang" ? {value: "hi"} : null),
+  };
+  global.FormData = class {
+    get(name) {
+      return {commute: "car", cooking: "gas", city: "Delhi", aqi: "180"}[name] ?? null;
+    }
+  };
+  global.fetch = async () => ({ok: false, json: async () => ({})});
+  try {
+    const fakeForm = {
+      elements: {
+        children: {checked: false}, elderly: {checked: false},
+        respiratory: {checked: false}, has_purifier: {checked: false}, outdoor_exercise: {checked: false},
+      },
+    };
+    const payload = PlanView.buildPayload(fakeForm, null, false);
+    assert.strictEqual(payload.lang, "hi");
+    await assert.rejects(
+      Dom.postJson("/api/plan", {lang: "hi"}),
+      (err) => err.message === I18n.PACKS.hi.err_generic
+    );
+  } finally {
+    global.document = prevDoc;
+    global.fetch = prevFetch;
+    global.FormData = prevFormData;
+  }
+});
