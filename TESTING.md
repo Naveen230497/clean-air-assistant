@@ -7,13 +7,13 @@ All automated tests run completely offline without live Gemini, Open-Meteo, Nomi
 - `NoNetworkTestCase` resets `gemini._breaker_until` and `ai._briefing_cache`, then patches `socket.socket.connect` and `socket.create_connection` to raise `RuntimeError` if any code attempts a real socket connection.
 - `ApiTestCase` builds an isolated Flask `test_client()` and clears `rate_limit._hits` before and after each test; `_AirDataApiTestCase` (`tests/test_air_data.py`) additionally resets `air_data._cache`, `air_data._names`, and `air_data._last_nominatim`.
 
-## Test Suites (`109` Python + `26` Node)
+## Test Suites (`111` Python + `26` Node)
 
 ```bash
-# Python suite (109 tests, strict ResourceWarning visibility)
+# Python suite (111 tests, strict ResourceWarning visibility)
 python -W default -m unittest discover -s tests -t .
 
-# Coverage across app/ (94% measured: 1071 statements, 65 missed; CI min 90%)
+# Coverage across app/ (94% measured: 1074 statements, 65 missed; CI min 90%)
 python -W default -m coverage run --source=app -m unittest discover -s tests -t .
 python -m coverage report --fail-under=90
 
@@ -21,9 +21,10 @@ python -m coverage report --fail-under=90
 node --test tests/
 ```
 
-- **Python breakdown (`tests/`):** `test_air_data.py` (24), `test_nearby.py` (18), `test_gemini.py` (17), `test_ai_routes.py` (13), `test_routes.py` (13), `test_recommender.py` (8), `test_i18n.py` (6), `test_validation.py` (6), `test_hygiene.py` (4).
+- **Python breakdown (`tests/`):** `test_air_data.py` (24), `test_nearby.py` (18), `test_gemini.py` (17), `test_ai_routes.py` (13), `test_routes.py` (13), `test_recommender.py` (8), `test_i18n.py` (8), `test_validation.py` (6), `test_hygiene.py` (4).
 - **Frontend breakdown (`tests/`):** `locate.test.js` (11), `ui.test.js` (10), `reading.test.js` (5).
 - **Hygiene (`tests/test_hygiene.py`):** Checks first-party `app/static/*.js` for DOM HTML-injection sinks, `index.html` for inline `<script>`/`<style>` blocks or attributes, all tracked files for API key prefixes, and total tracked repository size under `1 MB`.
+- **Multilingual tests (`tests/test_i18n.py`, `tests/reading.test.js`, `tests/ui.test.js`):** Cover `en`, `hi`, `te`, `ta`, `bn`, and `mr` outputs (machine-assisted translations, not guaranteed expert-reviewed; not full UI localization) and fallback safety; static form labels, geolocation/search status text, rate-limit (`429`) and `400` error messages, image-AQI error text, and distance units (`m`/`km`) stay English.
 
 ## Static Analysis & CI Gates (`.github/workflows/ci.yml`)
 
