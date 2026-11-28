@@ -19,6 +19,38 @@
   let aqiFromImage = false;
 
   /**
+   * Look up a localized UI label using CleanAirI18n.
+   * @param {string} lang Language code.
+   * @param {string} key Translation message key.
+   * @param {Record<string, string|number>} [params] Optional placeholder values.
+   * @returns {string} Localized label text.
+   */
+  function tr(lang, key, params) {
+    return I18n ? I18n.tr(lang, key, params) : "";
+  }
+
+  /**
+   * Read the active UI language code safely.
+   * @returns {string} Active normalized language code.
+   */
+  function currentLang() {
+    const raw = form.elements.lang?.value || Dom.byId("lang")?.value || (I18n && I18n.getPageLang());
+    return I18n ? I18n.normalizeLang(raw) : "en";
+  }
+
+  /**
+   * Resolve a readable display place label for the active plan and language.
+   * @param {object} data Plan API response payload.
+   * @param {{place?: string}|null} coords Active coordinates.
+   * @param {string} lang Active language code.
+   * @returns {string} Resolved display place name.
+   */
+  function resolveDisplayPlace(data, coords, lang) {
+    if (data.place && data.place !== "Your location") return data.place;
+    return coords?.place || data.place || tr(lang, "selected_default") || "Selected location";
+  }
+
+  /**
    * Synchronize status text, saved storage, and city input after plan resolution.
    * @param {object} data Plan API response payload.
    * @param {{lat: number, lon: number, place?: string, isManualOrApprox?: boolean}|null} coords Active coordinates.
@@ -28,9 +60,10 @@
     if (Boolean(aqiIn.value.trim())) return;
     MapLoc.saveLocation(data);
     if (!coords) return;
-    const disp = data.place && data.place !== "Your location" ? data.place : (coords.place || "Selected location");
-    const hint = coords.isManualOrApprox ? " Drag the pin to adjust your exact spot." : "";
-    geoSt.textContent = `\uD83D\uDCCD Selected: ${disp}.${hint}`;
+    const lang = I18n ? I18n.normalizeLang(data.lang || currentLang()) : "en";
+    const disp = resolveDisplayPlace(data, coords, lang);
+    const hint = coords.isManualOrApprox ? tr(lang, "drag_pin_hint") : "";
+    geoSt.textContent = tr(lang, "selected_place", {place: disp, hint});
     const c = Dom.cityFromPlace(disp);
     if (c) cityIn.value = c;
   }
@@ -42,9 +75,8 @@
    * @returns {void}
    */
   function handlePlanSuccess(data, coords) {
-    const placeName = data.place && data.place !== "Your location"
-      ? data.place
-      : (coords?.place || data.place || "Selected location");
+    const lang = I18n ? I18n.normalizeLang(data.lang || currentLang()) : "en";
+    const placeName = resolveDisplayPlace(data, coords, lang);
     PlanView.renderPlan(out, data, placeName);
     syncDetectedPlace(data, coords);
     Extras.resetContext(
@@ -60,7 +92,7 @@
    */
   async function onSubmitPlan(e) {
     e.preventDefault();
-    const lang = I18n ? I18n.normalizeLang(form.elements.lang?.value) : "en";
+    const lang = currentLang();
     out.setAttribute("aria-busy", "true");
     out.setAttribute("lang", lang);
     btn.disabled = true;
@@ -76,6 +108,12 @@
       btn.disabled = false;
       out.focus();
     }
+  }
+
+  if (I18n) {
+    I18n.initPageI18n(document, (nextLang) => {
+      out.setAttribute("lang", nextLang);
+    });
   }
 
   MapLoc.init({

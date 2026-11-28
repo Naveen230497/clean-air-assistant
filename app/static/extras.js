@@ -18,7 +18,7 @@
    * @returns {"en"|"hi"|"te"|"ta"|"bn"|"mr"} Active language code.
    */
   function activeLang() {
-    const raw = (ctx && ctx.lang) || (ui.langSelect && ui.langSelect.value) || "en";
+    const raw = (ui.langSelect && ui.langSelect.value) || (ctx && ctx.lang) || (I18n && I18n.getPageLang()) || "en";
     return I18n ? I18n.normalizeLang(raw) : "en";
   }
 
@@ -97,7 +97,7 @@
     st.textContent = t("image_reading");
     try {
       const b64 = await readFileAsBase64(file);
-      const data = await Dom.postJson("/api/image-aqi", {image: b64, mime: file.type});
+      const data = await Dom.postJson("/api/image-aqi", {image: b64, mime: file.type, lang: activeLang()});
       if (data.aqi !== null) {
         ui.onImageAqi(data.aqi);
         st.textContent = t("image_found", {aqi: data.aqi, note: data.note});
@@ -139,7 +139,7 @@
     try {
       const data = await Dom.postJson("/api/chat", {
         question: q, history: history.slice(-Dom.CONFIG.MAX_HISTORY),
-        aqi: ctx.aqi, place: ctx.place, lang: ctx.lang,
+        aqi: ctx.aqi, place: ctx.place, lang: activeLang(),
       });
       const reply = Dom.el("p", data.answer);
       reply.setAttribute("lang", activeLang());

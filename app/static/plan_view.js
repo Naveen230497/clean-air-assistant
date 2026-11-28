@@ -65,7 +65,8 @@
     const flags = {};
     for (const k of BOOL_FLAGS) flags[k] = form.elements[k].checked;
     return buildPayloadFromFields({
-      commute: f.get("commute"), cooking: f.get("cooking"), lang: f.get("lang"),
+      commute: f.get("commute"), cooking: f.get("cooking"),
+      lang: f.get("lang") || form.elements.lang?.value || Dom.byId("lang")?.value || "en",
       city: f.get("city"), aqi: f.get("aqi"), flags,
     }, coords, aqiFromImage);
   }

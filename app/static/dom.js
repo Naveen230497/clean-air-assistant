@@ -1,6 +1,7 @@
 "use strict";
 /* Shared DOM helpers, constants, validation regexes, and fetch wrapper. */
 (function (root) {
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   const SVG_NS = "http://www.w3.org/2000/svg";
   const CONFIG = {
     MAX_AQI: 500,
@@ -65,7 +66,8 @@
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      const err = new Error(data.error || "Something went wrong");
+      const lang = I18n ? I18n.normalizeLang(body?.lang || I18n.getPageLang()) : "en";
+      const err = new Error(data.error || (I18n && I18n.tr(lang, "err_generic")) || "Something went wrong");
       err.data = data;
       throw err;
     }

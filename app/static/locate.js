@@ -3,7 +3,20 @@
  * Works the same on phones (GPS) and laptops (Wi-Fi/network); the reported accuracy tells the
  * truth about how exact the fix is. No dependencies, no network calls: browser API only. */
 (function (root) {
-  const LIMITS = {precise: 150, good: 1500, approximate: 5000};  // metres
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
+  const LIMITS = {precise: 150, good: 1500, approximate: 5000};
+
+  /**
+   * Look up a localized geolocation message with English fallback.
+   * @param {string|undefined} lang Explicit language code or undefined for active page language.
+   * @param {string} key Translation message key.
+   * @param {Record<string, string|number>} [params] Placeholder substitutions.
+   * @returns {string} Localized text.
+   */
+  function tr(lang, key, params) {
+    const code = I18n ? I18n.normalizeLang(lang || I18n.getPageLang()) : "en";
+    return I18n ? I18n.tr(code, key, params) : "";
+  }
 
   /**
    * Map a geolocation accuracy radius in metres to a coarse/precise tier.
@@ -16,25 +29,26 @@
   /**
    * Format an accuracy distance in metres or kilometres.
    * @param {number} m Distance in metres.
+   * @param {string} [lang] Optional language code override.
    * @returns {string} Rounded display distance.
    */
-  const fmt = (m) => (m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 0 : 1) + " km" : Math.round(m) + " m");
-
-  const MESSAGES = {
-    0: "Location is not available here. Search your city or pincode instead.",
-    1: "Location is blocked. Tap the lock icon next to the address bar, allow Location, then try again.",
-    2: "Your device could not find its location. Turn on Location/GPS and Wi-Fi, then try again.",
-    3: "Finding your location took too long. Go near a window or outdoors, or search your city.",
+  const fmt = (m, lang) => {
+    const isKm = m >= 1000;
+    const val = isKm ? (m / 1000).toFixed(m >= 10000 ? 0 : 1) : Math.round(m);
+    const unit = tr(lang, isKm ? "unit_km" : "unit_m") || (isKm ? "km" : "m");
+    return `${val} ${unit}`;
   };
 
   /**
    * Build a geolocation Error carrying a standard status code.
    * @param {number} code Error status code (0-3).
-   * @param {string} [message] Optional explicit error message.
+   * @param {string|null} [message] Optional explicit error message.
+   * @param {string} [lang] Optional language code.
    * @returns {Error & {code: number}} Error instance with numeric code.
    */
-  function fail(code, message) {
-    const e = new Error(message || MESSAGES[code] || "Could not get your location.");
+  function fail(code, message, lang) {
+    const text = message || tr(lang, "loc_err_" + code) || tr(lang, "loc_err_generic") || "Could not get your location.";
+    const e = new Error(text);
     e.code = code;
     return e;
   }
@@ -60,17 +74,15 @@
 
   /**
    * Resolve with the best fix seen; stops early once accuracy <= opts.good metres.
-   * @param {{good?: number, maxWait?: number, onProgress?: (acc: number) => void}} [opts] Settling options.
+   * @param {{good?: number, maxWait?: number, onProgress?: (acc: number) => void, lang?: string}} [opts] Settling options.
    * @param {Geolocation|null} [geo] Geolocation API provider (defaults to navigator.geolocation).
    * @returns {Promise<{lat: number, lon: number, accuracy: number, quality: string, timestamp: number}>} Best fix.
    */
   function detect(opts = {}, geo = root.navigator && root.navigator.geolocation) {
-    const {good = 50, maxWait = 20000, onProgress} = opts;
+    const {good = 50, maxWait = 20000, onProgress, lang} = opts;
     return new Promise((resolve, reject) => {
-      if (!geo) return reject(fail(0));
-      if (root.isSecureContext === false) {
-        return reject(fail(0, "Location only works on a secure (https) page or localhost. Use the https link, or search your city."));
-      }
+      if (!geo) return reject(fail(0, null, lang));
+      if (root.isSecureContext === false) return reject(fail(0, tr(lang, "loc_err_https"), lang));
       let best = null, done = false, watchId = null, timer = null;
       const finish = (err, value) => {
         if (done) return;
@@ -86,28 +98,28 @@
           if (onProgress) onProgress(best.coords.accuracy);
           if (best.coords.accuracy <= good) finish(null, toFix(best));
         },
-        (e) => (best ? finish(null, toFix(best)) : finish(fail(e && e.code))),
+        (e) => (best ? finish(null, toFix(best)) : finish(fail(e && e.code, null, lang))),
         {enableHighAccuracy: true, timeout: maxWait, maximumAge: 0});
-      timer = setTimeout(() => (best ? finish(null, toFix(best)) : finish(fail(3))), maxWait);
+      timer = setTimeout(() => (best ? finish(null, toFix(best)) : finish(fail(3, null, lang))), maxWait);
     });
   }
 
   /**
    * Build an honest user-facing description of a geolocation fix's accuracy.
    * @param {{accuracy: number, quality: string}} fix Normalized geolocation fix.
+   * @param {string} [lang] Optional language code override.
    * @returns {string} User-facing status description.
    */
-  function describe(fix) {
-    const a = fmt(fix.accuracy);
-    if (fix.quality === "precise") return `Exact location found (accurate to about ${a}).`;
-    if (fix.quality === "good") return `Location found (accurate to about ${a}).`;
-    if (fix.quality === "approximate") {
-      return `Approximate location (about ${a}). Laptops estimate from Wi-Fi or the network; for an exact spot use a phone, or search your pincode.`;
-    }
-    return `Your device can only place you within about ${a}. Search your city or pincode to set the exact spot.`;
+  function describe(fix, lang) {
+    const keys = {
+      precise: "loc_desc_precise", good: "loc_desc_good",
+      approximate: "loc_desc_approx", coarse: "loc_desc_coarse",
+    };
+    const key = keys[fix.quality] || "loc_desc_coarse";
+    return tr(lang, key, {a: fmt(fix.accuracy, lang)});
   }
 
-  const MAX_AGE_MS = 24 * 60 * 60 * 1000;  // 24 hours
+  const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
   /**
    * Return true if the saved record is missing, corrupted, lacks a timestamp, or is older than maxAgeMs.

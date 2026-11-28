@@ -2,6 +2,7 @@
 /* Interactive Leaflet map, pin dragging, browser geolocation, and saved location cache. */
 (function (root) {
   const Dom = root.CleanAirDom || (typeof require !== "undefined" ? require("./dom.js") : null);
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   const DEFAULT_VIEW = {lat: 20.5, lon: 79.0, zoom: 5};
   const PICK_ZOOM = 13;
   const FIT_MAX_GOOD = 17;
@@ -11,6 +12,24 @@
   const TILE_ATTR = "&copy; <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener noreferrer\">OpenStreetMap</a> contributors";
 
   let map = null, marker = null, accCircle = null, locSeq = 0, coords = null, ui = {};
+
+  /**
+   * Read the active normalized UI language code.
+   * @returns {string} Active language code.
+   */
+  function langNow() {
+    return I18n ? I18n.getPageLang() : "en";
+  }
+
+  /**
+   * Translate a map/geolocation UI message for the active page language.
+   * @param {string} key Translation message key.
+   * @param {Record<string, string|number>} [params] Optional placeholder values.
+   * @returns {string} Localized text.
+   */
+  function tr(key, params) {
+    return I18n ? I18n.tr(langNow(), key, params) : "";
+  }
 
   /**
    * Format a coordinates summary line with place label.
@@ -140,7 +159,7 @@
   async function resolvePlace(lat, lon, knownPlace, seq) {
     if (knownPlace && knownPlace.toLowerCase() !== "your location") return {place: knownPlace, city: ""};
     try {
-      const r = await fetch(`/api/locate?lat=${lat}&lon=${lon}`);
+      const r = await fetch(`/api/locate?lat=${lat}&lon=${lon}&lang=${encodeURIComponent(langNow())}`);
       if (r.ok) {
         const d = await r.json();
         if (seq !== locSeq) return null;
@@ -163,8 +182,9 @@
     const city = Dom.cityFromPlace(resolved.place) || resolved.city || "";
     coords.place = resolved.place;
     ui.onLocationPicked(city);
-    const hint = showDragHint ? " Drag the pin to adjust your exact spot." : "";
-    ui.geoSt.textContent = `\uD83D\uDCCD Selected: ${resolved.place}.${hint}`;
+    const hint = showDragHint ? (tr("drag_pin_hint") || " Drag the pin to adjust your exact spot.") : "";
+    ui.geoSt.textContent = tr("selected_place", {place: resolved.place, hint})
+      || `\uD83D\uDCCD Selected: ${resolved.place}.${hint}`;
     showMapCoords(lat, lon, resolved.place);
     placeMarker(lat, lon, resolved.place);
     saveLocation(coords);
@@ -185,12 +205,12 @@
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     const seq = ++locSeq;
     coords = {lat, lon, isManualOrApprox: Boolean(showDragHint)};
-    placeMarker(lat, lon, "Locating\u2026");
+    placeMarker(lat, lon, tr("locating") || "Locating\u2026");
     if (map) {
       map.setView([lat, lon], Math.max(map.getZoom(), PICK_ZOOM));
       setTimeout(() => { if (map) map.invalidateSize(); }, 150);
     }
-    showMapCoords(lat, lon, "resolving address\u2026");
+    showMapCoords(lat, lon, tr("resolving_addr") || "resolving address\u2026");
     const resolved = await resolvePlace(lat, lon, knownPlace, seq);
     if (!resolved) return;
     finishExactLocation(lat, lon, resolved, shouldSubmit, showDragHint);
@@ -204,7 +224,8 @@
   function applySavedLocation(v) {
     coords = v;
     ui.cityIn.value = Dom.cityFromPlace(v.place);
-    ui.geoSt.textContent = `Last used: ${v.place}. Use my location or search to change it.`;
+    ui.geoSt.textContent = tr("last_used", {place: v.place})
+      || `Last used: ${v.place}. Use my location or search to change it.`;
     showMapCoords(v.lat, v.lon, v.place);
     ui.forgetBtn.hidden = false;
     initMap(v.lat, v.lon, PICK_ZOOM);
@@ -235,7 +256,7 @@
   function forgetLocation() {
     try { localStorage.removeItem(Dom.CONFIG.STORAGE_KEY); } catch (_) {}
     coords = null; ui.cityIn.value = ""; ui.forgetBtn.hidden = true;
-    ui.geoSt.textContent = "Saved location removed.";
+    ui.geoSt.textContent = tr("saved_removed") || "Saved location removed.";
     if (ui.mapCoordsEl) ui.mapCoordsEl.textContent = "";
     clearAccCircle();
     if (marker && map) { map.removeLayer(marker); marker = null; }
@@ -260,13 +281,13 @@
    * @returns {void}
    */
   function reportCoarseFix(fix) {
-    const a = root.CleanAirLocate.fmt(fix.accuracy);
+    const a = root.CleanAirLocate.fmt(fix.accuracy, langNow());
     if (coords && coords.place) {
-      ui.geoSt.textContent = `This device estimates you near the area shown (about ${a}). Keep ${coords.place}, or search your city or pincode to change it.`;
+      ui.geoSt.textContent = tr("coarse_keep", {a, place: coords.place});
       return;
     }
     if (map) map.setView([fix.lat, fix.lon], COARSE_ZOOM);
-    ui.geoSt.textContent = `This device estimates you near the area shown (about ${a}). Search your city or pincode to set the exact spot, or click the map.`;
+    ui.geoSt.textContent = tr("coarse_search", {a});
   }
 
   /**
@@ -274,18 +295,23 @@
    * @returns {Promise<void>} Resolves when geolocation handling finishes.
    */
   async function useLocation() {
-    ui.geoBtn.disabled = true; ui.geoSt.textContent = "Finding your location\u2026";
+    const lang = langNow();
+    ui.geoBtn.disabled = true;
+    ui.geoSt.textContent = tr("finding_loc") || "Finding your location\u2026";
     try {
       const fix = await root.CleanAirLocate.detect({
-        onProgress: (a) => { ui.geoSt.textContent = `Improving accuracy\u2026 currently about ${root.CleanAirLocate.fmt(a)}`; },
+        lang,
+        onProgress: (a) => {
+          ui.geoSt.textContent = tr("improving_acc", {a: root.CleanAirLocate.fmt(a, lang)});
+        },
       });
       showAccuracyCircle(fix);
       if (fix.quality === "coarse") { reportCoarseFix(fix); return; }
       await setExactLocation(fix.lat, fix.lon, null, fix.quality !== "approximate", fix.quality === "approximate");
-      const suffix = fix.quality === "approximate" ? " Drag the pin to adjust your exact spot." : "";
-      ui.geoSt.textContent = root.CleanAirLocate.describe(fix) + suffix;
+      const suffix = fix.quality === "approximate" ? (tr("drag_pin_hint") || "") : "";
+      ui.geoSt.textContent = root.CleanAirLocate.describe(fix, lang) + suffix;
     } catch (e) {
-      ui.geoSt.textContent = e.message || "Could not get your location. Search your city instead.";
+      ui.geoSt.textContent = e.message || tr("loc_failed") || "Could not get your location. Search your city instead.";
     } finally { ui.geoBtn.disabled = false; }
   }
 

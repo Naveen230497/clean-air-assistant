@@ -2,9 +2,19 @@
 /* City and 6-digit PIN code autocomplete combobox with keyboard navigation. */
 (function (root) {
   const Dom = root.CleanAirDom || (typeof require !== "undefined" ? require("./dom.js") : null);
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   const MIN_QUERY_LEN = 2;
 
   let opts = [], active = -1, timer = null, seq = 0, ui = {};
+
+  /**
+   * Look up a localized search status message for the active page language.
+   * @param {string} key Translation message key.
+   * @returns {string} Localized status text.
+   */
+  function tr(key) {
+    return I18n ? I18n.tr(I18n.getPageLang(), key) : "";
+  }
 
   /**
    * Compute wrapped option index when moving up or down in the autocomplete listbox.
@@ -92,11 +102,11 @@
         choose(0);
       } else {
         closeList();
-        ui.geoSt.textContent = "No match found. Check the spelling, try the 6-digit pincode, or click the map.";
+        ui.geoSt.textContent = tr("search_no_match") || "No match found. Check the spelling, try the 6-digit pincode, or click the map.";
       }
     } catch (_) {
       closeList();
-      ui.geoSt.textContent = "Search unavailable. Click the map to choose your location.";
+      ui.geoSt.textContent = tr("search_unavailable") || "Search unavailable. Click the map to choose your location.";
     }
   }
 
