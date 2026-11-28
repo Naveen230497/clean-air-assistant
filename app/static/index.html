@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Clean Air Assistant – your daily smog plan</title>
+<meta name="description" content="Personalised low-emission routines, indoor air tips and sustainable alternatives for winter smog.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/leaflet.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<a class="skip" href="#results">Skip to results</a>
+<div class="bg" aria-hidden="true"></div>
+<header class="hero">
+  <p class="eyebrow">Urban Air Quality Assistant</p>
+  <h1>Breathe easier, <span>one smart choice at a time.</span></h1>
+  <p class="lead">Tell us where you are and how you live. Get a plan for today, with the exact impact of every choice.</p>
+</header>
+
+<main class="layout">
+  <form id="form" class="panel" novalidate>
+    <section class="step" aria-labelledby="s1">
+      <h2 id="s1"><span class="n" aria-hidden="true">1</span>Check your air</h2>
+      <div class="row">
+        <div class="grow suggest-wrap">
+          <label for="city">Search city or 6-digit PIN code</label>
+          <input id="city" name="city" type="text" autocomplete="off" maxlength="60" placeholder="e.g. 522001, Guntur, Delhi"
+                 role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="city-list" aria-autocomplete="list">
+          <ul id="city-list" class="suggest" role="listbox" aria-label="City suggestions" hidden></ul>
+        </div>
+        <button type="button" id="geo" class="ghost"><span aria-hidden="true">📍</span> Use my location</button>
+      </div>
+      <p id="geo-status" class="help" role="status"></p>
+      <button type="button" id="forget" class="ghost small" hidden>Forget saved location</button>
+
+      <div class="map-section">
+        <div class="map-header">
+          <span id="map-label" class="label map-label"><span aria-hidden="true">🗺️</span> Pinpoint exact location on map</span>
+          <span id="map-tip" class="map-tip">Click map or drag the pin anywhere</span>
+        </div>
+        <div id="map" class="map-box" role="region" aria-labelledby="map-label" aria-describedby="map-tip"></div>
+        <p id="map-coords" class="help map-coords-text"></p>
+      </div>
+
+      <label for="aqi">Or type today's AQI (0–500)</label>
+      <input id="aqi" name="aqi" type="number" min="0" max="500" inputmode="numeric" aria-describedby="aqi-help">
+      <p id="aqi-help" class="help">Priority: typed AQI, then your location, then city.</p>
+
+      <p class="label">Or let AI read an AQI screenshot or sky photo</p>
+      <div class="drop" id="drop">
+        <label class="drop-main" for="photo"><span aria-hidden="true">🖼️</span> Drop, paste (Ctrl+V) or choose an image</label>
+        <input id="photo" class="sr" type="file" accept="image/png,image/jpeg,image/webp">
+        <label class="ghost small" for="camera"><span aria-hidden="true">📷</span> Take photo</label>
+        <input id="camera" class="sr" type="file" accept="image/*" capture="environment">
+      </div>
+      <p id="photo-status" class="help" role="status"></p>
+    </section>
+
+    <section class="step" aria-labelledby="s2">
+      <h2 id="s2"><span class="n" aria-hidden="true">2</span>Your lifestyle</h2>
+      <fieldset class="opts"><legend>Main commute</legend>
+        <label class="opt"><input type="radio" name="commute" value="public_transit" checked><span><span aria-hidden="true">🚇</span> Transit</span></label>
+        <label class="opt"><input type="radio" name="commute" value="car"><span><span aria-hidden="true">🚗</span> Car</span></label>
+        <label class="opt"><input type="radio" name="commute" value="two_wheeler"><span><span aria-hidden="true">🏍️</span> Two-wheeler</span></label>
+        <label class="opt"><input type="radio" name="commute" value="walk_cycle"><span><span aria-hidden="true">🚶</span> Walk / cycle</span></label>
+        <label class="opt"><input type="radio" name="commute" value="work_from_home"><span><span aria-hidden="true">🏠</span> Work from home</span></label>
+      </fieldset>
+      <fieldset class="opts"><legend>Cooking fuel</legend>
+        <label class="opt"><input type="radio" name="cooking" value="gas" checked><span><span aria-hidden="true">🔥</span> Gas / LPG</span></label>
+        <label class="opt"><input type="radio" name="cooking" value="induction"><span><span aria-hidden="true">⚡</span> Induction</span></label>
+        <label class="opt"><input type="radio" name="cooking" value="biomass"><span><span aria-hidden="true">🪵</span> Wood / biomass</span></label>
+      </fieldset>
+      <label for="lang">Answer language</label>
+      <select id="lang" name="lang">
+        <option value="en">English</option><option value="hi">हिन्दी (Hindi)</option>
+        <option value="te">తెలుగు (Telugu)</option><option value="ta">தமிழ் (Tamil)</option>
+        <option value="bn">বাংলা (Bengali)</option><option value="mr">मराठी (Marathi)</option>
+      </select>
+    </section>
+
+    <section class="step" aria-labelledby="s3">
+      <h2 id="s3"><span class="n" aria-hidden="true">3</span>Your household <small>(nothing is stored)</small></h2>
+      <div class="chips">
+        <label class="chip"><input type="checkbox" name="children"><span><span aria-hidden="true">👧</span> Children</span></label>
+        <label class="chip"><input type="checkbox" name="elderly"><span><span aria-hidden="true">🧓</span> Older adults</span></label>
+        <label class="chip"><input type="checkbox" name="respiratory"><span><span aria-hidden="true">🫁</span> Asthma / lung / heart</span></label>
+        <label class="chip"><input type="checkbox" name="has_purifier"><span><span aria-hidden="true">🌀</span> Air purifier</span></label>
+        <label class="chip"><input type="checkbox" name="outdoor_exercise"><span><span aria-hidden="true">🏃</span> Outdoor exercise</span></label>
+      </div>
+    </section>
+    <button type="submit" id="go" class="primary">Build my plan</button>
+  </form>
+
+  <div class="results-col">
+    <section id="results" tabindex="-1" aria-live="polite" aria-busy="false">
+      <div class="card empty"><h2>Your plan appears here</h2>
+        <p>Pick a city, use your location, or enter an AQI, then press <strong>Build my plan</strong>.</p></div>
+    </section>
+    <section id="extras" hidden>
+      <div class="card">
+        <h2><span aria-hidden="true">🔎</span> Local advisories <small>Google Search</small></h2>
+        <button type="button" id="adv-btn" class="ghost">Check official advisories for my city</button>
+        <div id="adv-out" aria-live="polite"></div>
+      </div>
+      <div class="card">
+        <h2>Nearby clean-air help <small>OpenStreetMap</small></h2>
+        <button type="button" id="near-btn" class="ghost">Find nearby help</button>
+        <div id="near-out" aria-live="polite"></div>
+      </div>
+      <div class="card">
+        <h2><span aria-hidden="true">💬</span> Ask a follow-up</h2>
+        <div id="chat-log" role="log" aria-live="polite"></div>
+        <form id="chat-form" class="row">
+          <div class="grow"><label for="q" class="sr">Your question about air quality</label>
+            <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Is it safe to jog tomorrow?"></div>
+          <button type="submit" id="q-btn" class="primary slim">Ask</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+<footer><p>Estimates are approximate and for general guidance only, not medical advice. Air data: Open-Meteo; place names: BigDataCloud. Your last city is remembered only in this browser; our server stores nothing.</p></footer>
+<script src="/static/leaflet.js" defer></script>
+<script src="/static/locate.js" defer></script>
+<script src="/static/reading.js" defer></script>
+<script src="/static/dom.js" defer></script>
+<script src="/static/plan_view.js" defer></script>
+<script src="/static/map_location.js" defer></script>
+<script src="/static/search_box.js" defer></script>
+<script src="/static/extras.js" defer></script>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
