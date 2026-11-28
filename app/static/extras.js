@@ -2,19 +2,41 @@
 /* Image reading, Google Search advisories, follow-up chat, and OSM nearby help panels. */
 (function (root) {
   const Dom = root.CleanAirDom || (typeof require !== "undefined" ? require("./dom.js") : null);
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   const METRES_PER_KM = 1000;
 
   let ctx = null, ctxCoords = null, history = [], ui = {};
 
   /**
+   * Return the active normalized language code from context or language selector.
+   * @returns {"en"|"hi"|"te"|"ta"|"bn"|"mr"} Active language code.
+   */
+  function activeLang() {
+    const raw = (ctx && ctx.lang) || (ui.langSelect && ui.langSelect.value) || "en";
+    return I18n ? I18n.normalizeLang(raw) : "en";
+  }
+
+  /**
+   * Translate a UI message key using the active language.
+   * @param {string} key Translation key.
+   * @param {Record<string, string|number>} [params] Placeholder map.
+   * @param {string} [lang] Optional explicit language override.
+   * @returns {string} Localized label string.
+   */
+  function t(key, params, lang) {
+    return I18n ? I18n.tr(lang || activeLang(), key, params) : "";
+  }
+
+  /**
    * Validate an uploaded or pasted image file's MIME type and size.
    * @param {File|null|undefined} file Candidate File object.
+   * @param {string} [lang] Optional language code for error text.
    * @returns {string|null} Validation error message or null when valid.
    */
-  function validateImageFile(file) {
+  function validateImageFile(file, lang) {
     if (!file) return null;
-    if (!Dom.CONFIG.ALLOWED_IMAGE_RE.test(file.type)) return "Use a PNG, JPEG or WebP image.";
-    if (file.size > Dom.CONFIG.MAX_IMAGE_BYTES) return "Image must be under 3 MB.";
+    if (!Dom.CONFIG.ALLOWED_IMAGE_RE.test(file.type)) return t("image_bad_type", undefined, lang);
+    if (file.size > Dom.CONFIG.MAX_IMAGE_BYTES) return t("image_too_big", undefined, lang);
     return null;
   }
 
@@ -49,17 +71,18 @@
   async function readImage(file) {
     const st = ui.photoStatus;
     if (!file) return;
-    const errMsg = validateImageFile(file);
+    st.setAttribute("lang", activeLang());
+    const errMsg = validateImageFile(file, activeLang());
     if (errMsg) { st.textContent = errMsg; return; }
-    st.textContent = "AI is reading the image\u2026";
+    st.textContent = t("image_reading");
     try {
       const b64 = await readFileAsBase64(file);
       const data = await Dom.postJson("/api/image-aqi", {image: b64, mime: file.type});
       if (data.aqi !== null) {
         ui.onImageAqi(data.aqi);
-        st.textContent = `AQI ${data.aqi} found. ${data.note}`;
+        st.textContent = t("image_found", {aqi: data.aqi, note: data.note});
       } else {
-        st.textContent = `No AQI number found. Visibility: ${data.visibility}. Please type the AQI.`;
+        st.textContent = t("image_no_num", {vis: data.visibility});
       }
     } catch (err) { st.textContent = err.message; }
   }
@@ -70,11 +93,12 @@
    */
   async function checkAdvisory() {
     const box = ui.advOut;
+    box.setAttribute("lang", activeLang());
     const city = (ctx?.place && !Dom.isCoordLabel(ctx.place) ? ctx.place : (ui.cityIn.value || "")).trim();
-    if (!city) { box.replaceChildren(Dom.el("p", "Enter a city above first.", "err")); return; }
+    if (!city) { box.replaceChildren(Dom.el("p", t("enter_city"), "err")); return; }
     box.replaceChildren(Dom.el("div", undefined, "skel"));
     try {
-      const data = await Dom.postJson("/api/advisory", {city, lang: ctx?.lang || "en"});
+      const data = await Dom.postJson("/api/advisory", {city, lang: activeLang()});
       box.replaceChildren(Dom.el("p", data.text));
       data.sources.forEach((s) => box.append(Dom.createLinkParagraph(s.title, s.url)));
     } catch (err) { box.replaceChildren(Dom.el("p", err.message, "err")); }
@@ -97,10 +121,15 @@
         question: q, history: history.slice(-Dom.CONFIG.MAX_HISTORY),
         aqi: ctx.aqi, place: ctx.place, lang: ctx.lang,
       });
-      ui.chatLog.append(Dom.el("p", data.answer));
+      const reply = Dom.el("p", data.answer);
+      reply.setAttribute("lang", activeLang());
+      ui.chatLog.append(reply);
       history.push({role: "user", text: q}, {role: "assistant", text: data.answer});
-    } catch (err) { ui.chatLog.append(Dom.el("p", err.message, "err")); }
-    finally { ui.qBtn.disabled = false; }
+    } catch (err) {
+      const errNode = Dom.el("p", err.message, "err");
+      errNode.setAttribute("lang", activeLang());
+      ui.chatLog.append(errNode);
+    } finally { ui.qBtn.disabled = false; }
   }
 
   /**
@@ -111,23 +140,20 @@
    */
   function renderNearbyList(box, data) {
     const places = data.places || [];
+    box.setAttribute("lang", activeLang());
     if (!places.length) {
-      box.replaceChildren(Dom.el("p", "No places found within 4 km. Try searching a nearby larger city.", "help"));
+      box.replaceChildren(Dom.el("p", t("no_places"), "help"));
       return;
     }
     box.replaceChildren();
-    if (data.stale) {
-      box.append(Dom.el("p", "Showing results from earlier today because the public map servers are busy.", "help"));
-    }
+    if (data.stale) box.append(Dom.el("p", t("stale_places"), "help"));
     places.forEach((p) => {
       const pEl = Dom.el("p", undefined, "src");
       pEl.append(Dom.el("span", `${p.name} \u00b7 ${p.category} \u00b7 ${formatDistance(p.distance_m)} `));
-      if (p.url && p.url.startsWith("https://")) {
-        pEl.append(Dom.externalLink("OpenStreetMap", p.url));
-      }
+      if (p.url && p.url.startsWith("https://")) pEl.append(Dom.externalLink("OpenStreetMap", p.url));
       box.append(pEl);
     });
-    box.append(Dom.el("p", "Data \u00a9 OpenStreetMap contributors. Opening hours, mask stock and indoor air quality are not verified: call ahead.", "help"));
+    box.append(Dom.el("p", t("osm_attr"), "help"));
   }
 
   /**
@@ -136,18 +162,19 @@
    */
   async function loadNearby() {
     const box = ui.nearOut;
+    box.setAttribute("lang", activeLang());
     if (!ctxCoords) {
-      box.replaceChildren(Dom.el("p", "Use my location, or pick a city from the suggestions, then build your plan first.", "err"));
+      box.replaceChildren(Dom.el("p", t("need_coords"), "err"));
       return;
     }
-    box.replaceChildren(Dom.el("p", "Searching nearby places\u2026 this can take up to 30 seconds.", "help"), Dom.el("div", undefined, "skel"));
+    box.replaceChildren(Dom.el("p", t("searching_nearby"), "help"), Dom.el("div", undefined, "skel"));
     try {
-      const data = await Dom.postJson("/api/nearby", {lat: ctxCoords.lat, lon: ctxCoords.lon, lang: ctx?.lang || "en"});
+      const data = await Dom.postJson("/api/nearby", {lat: ctxCoords.lat, lon: ctxCoords.lon, lang: activeLang()});
       renderNearbyList(box, data);
     } catch (err) {
       box.replaceChildren(Dom.el("p", err.message, "err"));
-      if (err.data?.map_url?.startsWith("https://")) box.append(Dom.createLinkParagraph("Open this area on OpenStreetMap", err.data.map_url));
-      const retry = Dom.el("button", "Try again", "ghost");
+      if (err.data?.map_url?.startsWith("https://")) box.append(Dom.createLinkParagraph(t("osm_open"), err.data.map_url));
+      const retry = Dom.el("button", t("try_again"), "ghost");
       retry.type = "button";
       retry.addEventListener("click", loadNearby);
       box.append(retry);

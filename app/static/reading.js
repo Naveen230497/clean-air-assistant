@@ -1,19 +1,32 @@
 "use strict";
 /* Format AQI reading source, local observation timestamp, relative age, and PM values. */
 (function (root) {
+  const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   // Open-Meteo updates hourly; warn once observations are older than 3 hours.
   const STALE_MS = 3 * 60 * 60 * 1000;
 
   /**
+   * Translate a reading label using CleanAirI18n or fallback strings.
+   * @param {string|undefined} lang Active language code.
+   * @param {string} key Message key.
+   * @param {Record<string, string|number>} [params] Placeholder values.
+   * @returns {string} Localized label.
+   */
+  function msg(lang, key, params) {
+    return I18n ? I18n.tr(lang, key, params) : "";
+  }
+
+  /**
    * Format an elapsed duration in milliseconds as relative minutes or hours.
    * @param {number} diffMs Elapsed milliseconds since reading time.
+   * @param {string} [lang] Language code for relative units.
    * @returns {string} Relative time phrase.
    */
-  function formatRelative(diffMs) {
+  function formatRelative(diffMs, lang = "en") {
     const mins = Math.max(0, Math.floor(diffMs / 60000));
-    if (mins < 60) return `${mins} min ago`;
+    if (mins < 60) return msg(lang, "reading_min_ago", {n: mins});
     const hours = Math.floor(mins / 60);
-    return `${hours} h ago`;
+    return msg(lang, "reading_h_ago", {n: hours});
   }
 
   /**
@@ -44,15 +57,27 @@
    * @param {string|null|undefined} rawTime ISO 8601 observation timestamp.
    * @param {number} nowMs Reference current timestamp in milliseconds.
    * @param {string|undefined} locale Optional BCP 47 locale tag.
+   * @param {string} [lang] Language code for reading labels.
    * @returns {string} Formatted reading-time clause or empty string.
    */
-  function formatTimeClause(rawTime, nowMs, locale) {
+  function formatTimeClause(rawTime, nowMs, locale, lang = "en") {
     if (!rawTime) return "";
     const dt = new Date(rawTime);
     if (Number.isNaN(dt.getTime())) return "";
     const diffMs = nowMs - dt.getTime();
-    const stale = diffMs > STALE_MS ? ". This reading may be out of date." : "";
-    return `. Reading time: ${formatLocalTime(dt, locale)} (${formatRelative(diffMs)})${stale}`;
+    const stale = diffMs > STALE_MS ? msg(lang, "reading_stale") : "";
+    return `${msg(lang, "reading_time", {time: formatLocalTime(dt, locale), rel: formatRelative(diffMs, lang)})}${stale}`;
+  }
+
+  /**
+   * Resolve the explicit locale or default BCP 47 tag for a language.
+   * @param {string} lang Normalized language code.
+   * @param {string|undefined} locale Explicit override locale.
+   * @returns {string|undefined} Resolved locale tag.
+   */
+  function localeTag(lang, locale) {
+    if (locale !== undefined) return locale;
+    return I18n ? I18n.localeFor(lang) : undefined;
   }
 
   /**
@@ -63,11 +88,12 @@
    * @returns {string} Full reading attribution and freshness summary line.
    */
   function formatReadingMeta(data, nowMs = Date.now(), locale = undefined) {
-    const src = (data && data.source) ? String(data.source) : "Open-Meteo";
-    let line = `Source: ${src}${formatTimeClause(data && data.observed_at, nowMs, locale)}`;
-    const pm = data ? formatPm(data.pm2_5, data.pm10) : "";
-    if (pm) line += ` \u00b7 ${pm}`;
-    return line;
+    const d = data || {};
+    const lang = I18n ? I18n.normalizeLang(d.lang) : "en";
+    const src = d.source ? String(d.source) : "Open-Meteo";
+    const clause = formatTimeClause(d.observed_at, nowMs, localeTag(lang, locale), lang);
+    const pm = formatPm(d.pm2_5, d.pm10);
+    return msg(lang, "reading_source", {source: src}) + clause + (pm ? ` \u00b7 ${pm}` : "");
   }
 
   const api = {formatReadingMeta, formatRelative, formatPm, STALE_MS};

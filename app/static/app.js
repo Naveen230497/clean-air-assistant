@@ -6,6 +6,7 @@
   const MapLoc = window.CleanAirMap;
   const Search = window.CleanAirSearch;
   const Extras = window.CleanAirExtras;
+  const I18n = window.CleanAirI18n;
 
   const form = Dom.byId("form");
   const out = Dom.byId("results");
@@ -59,9 +60,11 @@
    */
   async function onSubmitPlan(e) {
     e.preventDefault();
+    const lang = I18n ? I18n.normalizeLang(form.elements.lang?.value) : "en";
     out.setAttribute("aria-busy", "true");
+    out.setAttribute("lang", lang);
     btn.disabled = true;
-    out.replaceChildren(PlanView.createSkeleton());
+    out.replaceChildren(PlanView.createSkeleton(lang));
     try {
       const coords = MapLoc.getCoords();
       const body = PlanView.buildPayload(form, coords, aqiFromImage);
@@ -94,7 +97,7 @@
   });
 
   Extras.init({
-    cityIn, drop: Dom.byId("drop"), photoInput: Dom.byId("photo"), cameraInput: Dom.byId("camera"),
+    cityIn, langSelect: Dom.byId("lang"), drop: Dom.byId("drop"), photoInput: Dom.byId("photo"), cameraInput: Dom.byId("camera"),
     photoStatus: Dom.byId("photo-status"), advBtn: Dom.byId("adv-btn"), advOut: Dom.byId("adv-out"),
     chatForm: Dom.byId("chat-form"), qInput: Dom.byId("q"), qBtn: Dom.byId("q-btn"),
     chatLog: Dom.byId("chat-log"), nearBtn: Dom.byId("near-btn"), nearOut: Dom.byId("near-out"),
