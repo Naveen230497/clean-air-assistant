@@ -4,6 +4,12 @@
   const Dom = root.CleanAirDom || (typeof require !== "undefined" ? require("./dom.js") : null);
   const I18n = root.CleanAirI18n || (typeof require !== "undefined" ? require("./i18n.js") : null);
   const METRES_PER_KM = 1000;
+  const NEARBY_CAT_KEYS = {
+    "Hospital or clinic": "nearby_hospital",
+    Pharmacy: "nearby_pharmacy",
+    Library: "nearby_library",
+    Mall: "nearby_mall",
+  };
 
   let ctx = null, ctxCoords = null, history = [], ui = {};
 
@@ -41,12 +47,26 @@
   }
 
   /**
-   * Format distance in metres or kilometres.
+   * Format distance in metres or kilometres using localized unit labels.
    * @param {number} meters Distance in metres.
+   * @param {string} [lang] Optional language code override.
    * @returns {string} Human-readable distance label.
    */
-  function formatDistance(meters) {
-    return meters < METRES_PER_KM ? `${Math.round(meters)} m` : `${(meters / METRES_PER_KM).toFixed(1)} km`;
+  function formatDistance(meters, lang) {
+    const unit = meters < METRES_PER_KM ? (t("unit_m", undefined, lang) || "m") : (t("unit_km", undefined, lang) || "km");
+    const val = meters < METRES_PER_KM ? Math.round(meters) : (meters / METRES_PER_KM).toFixed(1);
+    return `${val} ${unit}`;
+  }
+
+  /**
+   * Translate a known nearby venue category label into the active language.
+   * @param {string|null|undefined} category Canonical or pre-localized venue category.
+   * @param {string} [lang] Optional language code override.
+   * @returns {string} Localized category label or original fallback string.
+   */
+  function translateCategory(category, lang) {
+    const key = Object.hasOwn(NEARBY_CAT_KEYS, category) ? NEARBY_CAT_KEYS[category] : "";
+    return (key && t(key, undefined, lang)) || String(category || "");
   }
 
   /**
@@ -149,7 +169,8 @@
     if (data.stale) box.append(Dom.el("p", t("stale_places"), "help"));
     places.forEach((p) => {
       const pEl = Dom.el("p", undefined, "src");
-      pEl.append(Dom.el("span", `${p.name} \u00b7 ${p.category} \u00b7 ${formatDistance(p.distance_m)} `));
+      const cat = translateCategory(p.category);
+      pEl.append(Dom.el("span", `${p.name} \u00b7 ${cat} \u00b7 ${formatDistance(p.distance_m)} `));
       if (p.url && p.url.startsWith("https://")) pEl.append(Dom.externalLink("OpenStreetMap", p.url));
       box.append(pEl);
     });
@@ -214,7 +235,7 @@
     ui.nearBtn.addEventListener("click", loadNearby);
   }
 
-  const api = {init, resetContext, validateImageFile, formatDistance};
+  const api = {init, resetContext, validateImageFile, formatDistance, translateCategory, renderNearbyList};
   root.CleanAirExtras = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

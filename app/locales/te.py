@@ -100,4 +100,8 @@ MESSAGES: dict[str, str] = {
     "err.chat": "సహాయకుడు ఇప్పుడు అందుబాటులో లేడు.",
     "err.nearby_busy": "పబ్లిక్ OpenStreetMap సర్వర్లు ఇప్పుడు బిజీగా ఉన్నాయి. మీరు ఈ ప్రాంతాన్ని మ్యాప్‌లో తెరవవచ్చు.",
     "place.default": "మీ ప్రాంతం",
+    "nearby.hospital": "ఆసుపత్రి లేదా క్లినిక్",
+    "nearby.pharmacy": "మందుల దుకాణం",
+    "nearby.library": "గ్రంథాలయం",
+    "nearby.mall": "మాల్",
 }

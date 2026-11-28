@@ -17,9 +17,9 @@ Clean Air Assistant is a Flask + Vanilla JS single-page web application run in p
 
 ## Frontend Modules (`app/static/`)
 
-- `index.html` & `style.css`: Semantic single-page UI with dark/light theme variables, responsive layout, and `.sr`/`.sr-only` screen-reader text. Not full UI localization: static form labels, geolocation/search status text, distance units (`m`/`km`), and client fetch/400/rate-limit/image-AQI error text stay English; `"Answer language"` controls generated outputs and dynamic labels.
+- `index.html` & `style.css`: Semantic single-page UI with dark/light theme variables, responsive layout, and `.sr`/`.sr-only` screen-reader text. Not full UI localization: static form labels, geolocation/search status text, returned venue names, and client fetch/400/rate-limit/image-AQI error text stay English; `"Answer language"` controls generated outputs, nearby categories, and `m`/`km` units.
 - Deferred IIFE modules (no build pipeline, zero raw HTML injection): `locate.js` -> `i18n.js`, `reading.js`, `dom.js` -> `plan_view.js`, `map_location.js`, `search_box.js`, `extras.js` -> `app.js`.
-- `app/static/i18n.js`: Machine-assisted translations, not guaranteed expert-reviewed, with `lang`-attribute tagging (`textContent` only) across cards, gauge/meter labels, reading metadata, and secondary panel headings.
+- `app/static/i18n.js`: Machine-assisted translations, not guaranteed expert-reviewed, with `lang`-attribute tagging (`textContent` only) across cards, gauge/meter labels, reading metadata, nearby categories/`m`/`km` units, and secondary panel headings.
 - Self-hosted map assets: vendored `leaflet.js`, `leaflet.css`, and `pin.svg`.
 
 ## Primary Request Flow (`POST /api/plan`)

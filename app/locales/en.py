@@ -101,4 +101,8 @@ MESSAGES: dict[str, str] = {
         "Public OpenStreetMap servers are busy right now. You can open this area on the map instead."
     ),
     "place.default": "your location",
+    "nearby.hospital": "Hospital or clinic",
+    "nearby.pharmacy": "Pharmacy",
+    "nearby.library": "Library",
+    "nearby.mall": "Mall",
 }

@@ -230,3 +230,53 @@ test("PlanView.renderPlan localizes dynamic UI labels and sets lang attribute cl
     global.requestAnimationFrame = prevRaf;
   }
 });
+
+test("CleanAirI18n and Extras localize nearby venue categories and m/km distance units cleanly", () => {
+  const langs = ["hi", "te", "ta", "bn", "mr"];
+  const keys = ["nearby_hospital", "nearby_pharmacy", "nearby_library", "nearby_mall", "unit_m", "unit_km"];
+  for (const lang of langs) {
+    for (const key of keys) {
+      assert.notStrictEqual(I18n.PACKS[lang][key], I18n.PACKS.en[key], `${lang}.${key} should be translated`);
+    }
+    assert.strictEqual(Extras.formatDistance(350, lang), `350 ${I18n.PACKS[lang].unit_m}`);
+    assert.strictEqual(Extras.formatDistance(1500, lang), `1.5 ${I18n.PACKS[lang].unit_km}`);
+    assert.strictEqual(Extras.translateCategory("Hospital or clinic", lang), I18n.PACKS[lang].nearby_hospital);
+  }
+  assert.strictEqual(I18n.tr("xx", "unit_m"), "m");
+  assert.strictEqual(I18n.tr("xx", "unit_km"), "km");
+  assert.strictEqual(I18n.tr("xx", "nearby_hospital"), "Hospital or clinic");
+  assert.strictEqual(Extras.formatDistance(420, "xx"), "420 m");
+  assert.strictEqual(Extras.formatDistance(2400, "xx"), "2.4 km");
+  assert.strictEqual(Extras.translateCategory("Mall", "xx"), "Mall");
+});
+
+test("Extras.renderNearbyList translates categories and units while keeping returned place names", () => {
+  const prevDoc = global.document;
+  global.document = {
+    createElement: (tag) => makeFakeNode(tag),
+    createElementNS: (ns, tag) => makeFakeNode(tag, ns),
+    addEventListener() {},
+  };
+  try {
+    const box = makeFakeNode("div");
+    Extras.init({
+      photoInput: {addEventListener() {}}, cameraInput: {addEventListener() {}},
+      drop: {addEventListener() {}}, advBtn: {addEventListener() {}},
+      chatForm: {addEventListener() {}}, nearBtn: {addEventListener() {}},
+      chatLog: makeFakeNode("div"), advOut: makeFakeNode("div"), nearOut: box, extrasSection: {},
+    });
+    Extras.resetContext({aqi: 180, place: "Guntur", lang: "te"}, {lat: 16.3, lon: 80.4});
+    Extras.renderNearbyList(box, {
+      places: [
+        {name: "Care Clinic", category: "Hospital or clinic", distance_m: 350, url: "https://www.openstreetmap.org/node/1"},
+        {name: "City Mall", category: "Mall", distance_m: 1500, url: "https://www.openstreetmap.org/node/2"},
+      ],
+    });
+    assert.strictEqual(box.attrs.lang, "te");
+    const spans = findNodes(box, (n) => n.tagName === "span").map((n) => n.textContent);
+    assert.strictEqual(spans[0], "Care Clinic \u00b7 ఆసుపత్రి లేదా క్లినిక్ \u00b7 350 మీ. ");
+    assert.strictEqual(spans[1], "City Mall \u00b7 మాల్ \u00b7 1.5 కి.మీ. ");
+  } finally {
+    global.document = prevDoc;
+  }
+});

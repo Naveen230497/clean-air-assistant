@@ -27,6 +27,12 @@ bp = Blueprint("main", __name__)
 
 SMALL_BODY = 8 * 1024
 _SOURCE_KEYS = {"Entered by you": "source.manual", "Read from your screenshot": "source.image"}
+_NEARBY_CAT_KEYS = {
+    "Hospital or clinic": "nearby.hospital",
+    "Pharmacy": "nearby.pharmacy",
+    "Library": "nearby.library",
+    "Mall": "nearby.mall",
+}
 
 
 def _guard(max_bytes: int = SMALL_BODY) -> tuple[Response, int] | None:
@@ -212,6 +218,16 @@ def chat() -> ResponseReturnValue:
         return _handle_gemini_error(exc, "err.chat", lang)
 
 
+def _localize_places(items: list[dict[str, Any]], lang: str) -> list[dict[str, Any]]:
+    """Return nearby venue entries with translated category labels and untouched names."""
+    return [
+        {**p, "category": i18n.t(_NEARBY_CAT_KEYS[p["category"]], lang)}
+        if p.get("category") in _NEARBY_CAT_KEYS
+        else dict(p)
+        for p in items
+    ]
+
+
 @bp.post("/api/nearby")
 def nearby() -> ResponseReturnValue:
     """Return nearby healthcare, pharmacy, library, or mall venues via OpenStreetMap."""
@@ -224,7 +240,10 @@ def nearby() -> ResponseReturnValue:
     r_lat, r_lon = round_coords(lat, lon)
     try:
         found = nearby_places(r_lat, r_lon)
-        payload = {"places": list(found), "attribution": "Data © OpenStreetMap contributors (ODbL)"}
+        payload = {
+            "places": _localize_places(list(found), lang),
+            "attribution": "Data © OpenStreetMap contributors (ODbL)",
+        }
         if getattr(found, "stale", False):
             payload["stale"] = True
         return jsonify(payload)

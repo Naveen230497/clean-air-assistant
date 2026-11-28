@@ -156,6 +156,30 @@ class LocalizedPlanTests(ApiTestCase):
                 self.assertEqual(geo["place"], t("place.default", lang))
                 self.assertNotIn("your location", geo["briefing"]["summary"].lower())
 
+    def test_nearby_route_localizes_categories_keeping_place_names(self) -> None:
+        sample = [
+            {"name": "Apollo Hospital", "category": "Hospital or clinic", "distance_m": 250,
+             "url": "https://www.openstreetmap.org/node/1"},
+            {"name": "MedPlus", "category": "Pharmacy", "distance_m": 400,
+             "url": "https://www.openstreetmap.org/node/2"},
+            {"name": "Central Library", "category": "Library", "distance_m": 900,
+             "url": "https://www.openstreetmap.org/node/3"},
+            {"name": "City Mall", "category": "Mall", "distance_m": 1500,
+             "url": "https://www.openstreetmap.org/node/4"},
+        ]
+        cat_keys = ("nearby.hospital", "nearby.pharmacy", "nearby.library", "nearby.mall")
+        with patch("app.routes.nearby_places", return_value=sample):
+            r_en = self.client.post("/api/nearby", json={"lat": 16.3, "lon": 80.4, "lang": "en"}).get_json()
+            r_def = self.client.post("/api/nearby", json={"lat": 16.3, "lon": 80.4}).get_json()
+            self.assertEqual(r_en, r_def)
+            self.assertEqual([p["category"] for p in r_en["places"]], [t(k, "en") for k in cat_keys])
+
+            for lang in ("hi", "te", "ta", "bn", "mr"):
+                res = self.client.post("/api/nearby", json={"lat": 16.3, "lon": 80.4, "lang": lang}).get_json()
+                self.assertEqual([p["name"] for p in res["places"]], [p["name"] for p in sample])
+                self.assertEqual([p["category"] for p in res["places"]], [t(k, lang) for k in cat_keys])
+        self.assertEqual(sample[0]["category"], "Hospital or clinic")
+
 
 if __name__ == "__main__":
     unittest.main()

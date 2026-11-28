@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Flask 3.x](https://img.shields.io/badge/framework-Flask%203.x-black.svg)](https://flask.palletsprojects.com/)
-[![Tests](https://img.shields.io/badge/tests-111%20python%20%7C%2026%20node%20passed-success.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-112%20python%20%7C%2028%20node%20passed-success.svg)](#testing)
 [![AI Engine](https://img.shields.io/badge/AI-Google%20Gemini%202.5%20Flash-orange.svg)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -200,7 +200,7 @@ clean-air-assistant/
 │       ├── plan_view.js    # Plan payload builder, SVG AQI gauge, skeleton & cards (CleanAirPlanView)
 │       ├── map_location.js # Interactive Leaflet map, pin drag, and localStorage state (CleanAirMap)
 │       ├── search_box.js   # City/PIN combobox autocomplete and keyboard navigation (CleanAirSearch)
-│       ├── extras.js       # Image upload, advisories, chat, and nearby help panels (CleanAirExtras)
+│       ├── extras.js       # Image upload, advisories, chat, and localized nearby categories/units (CleanAirExtras)
 │       ├── app.js          # Top-level coordinator binding form submission and modules
 │       ├── pin.svg         # Self-hosted SVG map pin icon
 │       ├── leaflet.js      # Vendored Leaflet 1.9.4 library
@@ -213,12 +213,12 @@ clean-air-assistant/
 │   ├── helpers.py          # Shared offline test base class and socket guard
 │   ├── locate.test.js      # 11 unit tests for location engine settling & thresholds
 │   ├── reading.test.js     # 5 unit tests for reading time, stale warning, i18n & PM formatting
-│   ├── ui.test.js          # 10 unit tests for pure DOM/payload/gauge/search/a11y/i18n/CSS helpers
+│   ├── ui.test.js          # 12 unit tests for pure DOM/payload/gauge/search/a11y/i18n/CSS helpers
 │   ├── test_ai_routes.py   # 13 tests for AI HTTP routes (/api/image-aqi, /api/advisory, /api/chat)
 │   ├── test_air_data.py    # 24 tests for place search, Nominatim throttle, geocoding & reading metadata
 │   ├── test_gemini.py      # 17 tests for Gemini REST client, breaker, fallback & capabilities
 │   ├── test_hygiene.py     # 4 tests for DOM XSS sinks, inline HTML assets, key prefixes & repo size
-│   ├── test_i18n.py        # 8 tests for 6-language catalogs, rules, briefings, punctuation & localized route fallbacks
+│   ├── test_i18n.py        # 9 tests for 6-language catalogs, rules, briefings, punctuation, nearby & fallbacks
 │   ├── test_nearby.py      # 18 tests for OpenStreetMap Overpass & caches
 │   ├── test_recommender.py # 8 tests for AQI bands & rules engine
 │   ├── test_routes.py      # 13 tests for core HTTP routes, CSP & rate limiter
@@ -302,7 +302,7 @@ python -W default -m unittest discover -s tests -t .
 ```
 Output:
 ```text
-Ran 111 tests
+Ran 112 tests
 
 OK
 ```
@@ -313,17 +313,17 @@ node --test tests/
 ```
 Output:
 ```text
-# tests 26
+# tests 28
 # suites 0
-# pass 26
+# pass 28
 # fail 0
 ```
 
 ### Code Quality
 - **Static analysis (`ruff`, `flake8`, & `eslint`)**: `0` findings across `app`, `tests`, and first-party `app/static/` (configured in `pyproject.toml`, `.flake8` with max line length `120`, and `eslint.config.js`); `pylint app` rated `9.90 / 10`.
 - **Modularity & complexity**: `0` functions above Cyclomatic Complexity `10` (`radon cc -s -n C app`), `0` Python functions or first-party JS function bodies above `40` lines, and all first-party JS modules are plain deferred IIFEs with `0` `innerHTML` usage.
-- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`136/136` items documented); `94%` Python line coverage across `app/` (`coverage run --source=app`: `1074` statements, `65` missed); `100.0%` parameter and return type annotations across `app/` (`105/105` functions).
-- **Multilingual scope (6 languages — machine-assisted translations, not guaranteed expert-reviewed)**: rule-based plans, actions, safety notes, template briefings, default place fallbacks, dynamic card/reading/advisory/nearby headings (`lang` attributes set via `textContent`), and `lang`-aware route error messages (`err.*`) follow `en`, `hi`, `te`, `ta`, `bn`, and `mr` (partial output localization, not full UI localization); static form labels in `index.html`, geolocation/search status text, rate-limit (`429`) and `400` error messages, `/api/image-aqi` error text, missing-key (`503`) responses, and distance units (`m`/`km`) stay English.
+- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`137/137` items documented); `94%` Python line coverage across `app/` (`coverage run --source=app`: `1077` statements, `65` missed); `100.0%` parameter and return type annotations across `app/` (`106/106` functions).
+- **Multilingual scope (6 languages — machine-assisted translations, not guaranteed expert-reviewed)**: rule-based plans, actions, safety notes, template briefings, default place fallbacks, dynamic card/reading/advisory/nearby headings, nearby venue categories, `m`/`km` distance units (`lang` attributes set via `textContent`), and `lang`-aware route error messages (`err.*`) follow `en`, `hi`, `te`, `ta`, `bn`, and `mr` (partial output localization, not full UI localization); returned OpenStreetMap place names, static form labels in `index.html`, geolocation/search status text, rate-limit (`429`) and `400` error messages, `/api/image-aqi` error text, and missing-key (`503`) responses stay English.
 
 ---
 
