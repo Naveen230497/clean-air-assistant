@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FIRST_PARTY_JS = [
-    p for p in sorted((ROOT / "app" / "static").glob("*.js")) if p.name != "leaflet.js"
+    p for p in sorted((ROOT / "app" / "static").rglob("*.js")) if p.name != "leaflet.js"
 ]
 INDEX_HTML = ROOT / "app" / "static" / "index.html"
 MAX_REPO_BYTES = 1024 * 1024

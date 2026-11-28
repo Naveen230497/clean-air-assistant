@@ -3,7 +3,7 @@ module.exports = [
     ignores: ["app/static/leaflet.js"],
   },
   {
-    files: ["app/static/*.js"],
+    files: ["app/static/*.js", "app/static/locales/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",
