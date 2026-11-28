@@ -184,14 +184,17 @@ clean-air-assistant/
 │   ├── validation.py       # Strict payload, coordinate, regex, and magic-byte validators
 │   ├── air_data.py         # Multi-service sensor ingestion, geocoding & reverse geocoding
 │   ├── aqi.py              # EPA US AQI classification scale (0-500, 6 severity bands)
+│   ├── i18n.py             # Offline localization helpers with English fallback
+│   ├── locales/            # Authored 6-language message catalogs (en, hi, te, ta, bn, mr)
 │   ├── recommender.py      # Rules engine & mathematical exposure reduction formula
 │   ├── gemini.py           # Robust REST client (auto-loads .env, safety, timeouts)
 │   ├── nearby.py           # OpenStreetMap nearby places (Overpass mirrors, 30s deadline, 10m + 24h stale caches, 1 req/2s & daily cap)
-│   ├── ai.py               # 7 GenAI capability implementations & deterministic fallbacks
+│   ├── ai.py               # 7 GenAI capability implementations & localized deterministic fallbacks
 │   └── static/             # Pure Vanilla frontend (plain deferred IIFE scripts, no build tools)
-│       ├── index.html      # Accessible semantic HTML5 layout with ARIA landmarks
+│       ├── index.html      # Accessible semantic HTML5 layout with ARIA landmarks (static form chrome in English)
 │       ├── style.css       # Responsive design, light/dark themes, accessible focus contrast, reduced-motion
 │       ├── locate.js       # Client-side settling location engine (CleanAirLocate)
+│       ├── i18n.js         # Client dynamic UI translations and lang-attribute tagging (CleanAirI18n)
 │       ├── reading.js      # Reading source, local timestamp, age & PM formatter (CleanAirReading)
 │       ├── dom.js          # Shared DOM/SVG helpers, constants, and JSON fetch wrapper (CleanAirDom)
 │       ├── plan_view.js    # Plan payload builder, SVG AQI gauge, skeleton & cards (CleanAirPlanView)
@@ -209,12 +212,13 @@ clean-air-assistant/
 │   ├── __init__.py
 │   ├── helpers.py          # Shared offline test base class and socket guard
 │   ├── locate.test.js      # 11 unit tests for location engine settling & thresholds
-│   ├── reading.test.js     # 4 unit tests for reading time, stale warning & PM formatting
-│   ├── ui.test.js          # 8 unit tests for pure DOM/payload/gauge/search/a11y/CSS helpers
+│   ├── reading.test.js     # 5 unit tests for reading time, stale warning, i18n & PM formatting
+│   ├── ui.test.js          # 10 unit tests for pure DOM/payload/gauge/search/a11y/i18n/CSS helpers
 │   ├── test_ai_routes.py   # 13 tests for AI HTTP routes (/api/image-aqi, /api/advisory, /api/chat)
 │   ├── test_air_data.py    # 24 tests for place search, Nominatim throttle, geocoding & reading metadata
 │   ├── test_gemini.py      # 17 tests for Gemini REST client, breaker, fallback & capabilities
 │   ├── test_hygiene.py     # 4 tests for DOM XSS sinks, inline HTML assets, key prefixes & repo size
+│   ├── test_i18n.py        # 6 tests for 6-language catalogs, rules, briefings & localized route fallbacks
 │   ├── test_nearby.py      # 18 tests for OpenStreetMap Overpass & caches
 │   ├── test_recommender.py # 8 tests for AQI bands & rules engine
 │   ├── test_routes.py      # 13 tests for core HTTP routes, CSP & rate limiter
@@ -298,7 +302,7 @@ python -W default -m unittest discover -s tests -t .
 ```
 Output:
 ```text
-Ran 103 tests
+Ran 109 tests
 
 OK
 ```
@@ -309,16 +313,17 @@ node --test tests/
 ```
 Output:
 ```text
-# tests 23
+# tests 26
 # suites 0
-# pass 23
+# pass 26
 # fail 0
 ```
 
 ### Code Quality
-- **Static analysis (`ruff`, `flake8`, & `eslint`)**: `0` findings across `app`, `tests`, and first-party `app/static/` (configured in `pyproject.toml`, `.flake8` with max line length `120`, and `eslint.config.js`); `pylint app` rated `9.89 / 10`.
+- **Static analysis (`ruff`, `flake8`, & `eslint`)**: `0` findings across `app`, `tests`, and first-party `app/static/` (configured in `pyproject.toml`, `.flake8` with max line length `120`, and `eslint.config.js`); `pylint app` rated `9.90 / 10`.
 - **Modularity & complexity**: `0` functions above Cyclomatic Complexity `10` (`radon cc -s -n C app`), `0` Python functions or first-party JS function bodies above `40` lines, and all first-party JS modules are plain deferred IIFEs with `0` `innerHTML` usage.
-- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`125/125` items documented); `94%` Python line coverage across `app/` (`coverage`); `100.0%` parameter and return type annotations across `app/*.py` (`102/102` functions).
+- **Documentation, coverage & typing**: `interrogate app` `100.0%` (`136/136` items documented); `94%` Python line coverage across `app/` (`coverage`); `100.0%` parameter and return type annotations across `app/` (`105/105` functions).
+- **Multilingual scope (6 languages, authored text reviewed by maintainer)**: plans, actions, safety notes, fallback briefings, dynamic card/reading/extras labels (`lang` attributes set via `textContent`), and `lang`-aware route errors support `en`, `hi`, `te`, `ta`, `bn`, and `mr`; static form chrome in `index.html` and pre-plan location/upload prompts intentionally stay in English.
 
 ---
 

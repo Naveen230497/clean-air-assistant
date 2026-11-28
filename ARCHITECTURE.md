@@ -11,13 +11,15 @@ Clean Air Assistant is a Flask + Vanilla JS single-page web application run in p
 - `app/shared.py`: Shared thread-safe FIFO-bounded cache helpers (`cache_get`, `cache_store_bounded`), `0.01`-degree coordinate rounding (`round_coords`), language list, and `osm_user_agent`.
 - `app/air_data.py`: Open-Meteo geocoding and air-quality client, BigDataCloud reverse geocoding, and 1-req/s throttled Nominatim place search with `600` s cache (`MAX_ENTRIES = 2000`).
 - `app/aqi.py` & `app/recommender.py`: Deterministic EPA US AQI scale (`0-500`) and personalized household exposure-reduction rule engine.
-- `app/gemini.py` & `app/ai.py`: Direct Gemini REST client (`x-goog-api-key` header, `60.0` s 429 circuit breaker, model fallback) powering briefings, `get_air_quality` tool calling, Google Search advisories, image AQI extraction, and chat, with rule-based fallback.
+- `app/i18n.py` & `app/locales/`: Maintainer-reviewed message catalogs for 6 languages (`en`, `hi`, `te`, `ta`, `bn`, `mr`) with English fallback (`t()`, `band_label()`).
+- `app/gemini.py` & `app/ai.py`: Direct Gemini REST client (`x-goog-api-key` header, `60.0` s 429 circuit breaker, model fallback) powering briefings, `get_air_quality` tool calling, Google Search advisories, image AQI extraction, and chat, with localized rule-based fallback.
 - `app/nearby.py`: Keyless OpenStreetMap Overpass client (`ovp.dresel.systems`, `maps.mail.ru`) with `30.0` s deadline, 1-req/2 s throttle, UTC daily cap, and `600` s fresh / `86400` s stale caches.
 
 ## Frontend Modules (`app/static/`)
 
-- `index.html` & `style.css`: Semantic single-page UI with dark/light theme variables, responsive layout, and `.sr`/`.sr-only` screen-reader text.
-- Deferred IIFE modules (no build pipeline, zero raw HTML injection): `dom.js` -> `locate.js`, `reading.js` -> `plan_view.js`, `map_location.js`, `search_box.js`, `extras.js` -> `app.js`.
+- `index.html` & `style.css`: Semantic single-page UI with dark/light theme variables, responsive layout, and `.sr`/`.sr-only` screen-reader text. Static form chrome (hero copy, step titles, input labels, footer) intentionally stays English; `"Answer language"` controls generated outputs.
+- Deferred IIFE modules (no build pipeline, zero raw HTML injection): `locate.js` -> `i18n.js`, `reading.js`, `dom.js` -> `plan_view.js`, `map_location.js`, `search_box.js`, `extras.js` -> `app.js`.
+- `app/static/i18n.js`: Authored dynamic UI translation catalog and `lang`-attribute tagging (`textContent` only) across cards, gauge/meter labels, reading metadata, and secondary panel statuses.
 - Self-hosted map assets: vendored `leaflet.js`, `leaflet.css`, and `pin.svg`.
 
 ## Primary Request Flow (`POST /api/plan`)

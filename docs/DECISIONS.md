@@ -14,3 +14,6 @@ The frontend loads vendored Leaflet (`leaflet.js`, `leaflet.css`, `pin.svg`) and
 
 ## 5. Proxy-Aware Limiting & Per-Route Body Caps (`app/routes.py`, `app/rate_limit.py`)
 `ProxyFix(x_for=1)` resolves client IPs behind Cloud Run, `_guard()` enforces a `30`-req/`60` s sliding window with stale-entry pruning before measuring body bytes (`8192` bytes JSON; `MAX_UPLOAD_BYTES = 5 MB` image upload), and `Dockerfile` runs single-process `--workers 1 --threads 4` so in-memory limiters and caches stay consistent per instance.
+
+## 6. Authored 6-Language Catalogs With English Chrome (`app/i18n.py`, `app/locales/`, `app/static/i18n.js`)
+Generated plans, EPA bands, safety disclaimers, fallback briefings, reading metadata, dynamic card labels, and `lang`-aware route errors use maintainer-reviewed translations across all 6 languages (`en`, `hi`, `te`, `ta`, `bn`, `mr`) with English fallback. Static `index.html` form chrome remains English so `"Answer language"` only swaps dynamic output without layout shifts.
